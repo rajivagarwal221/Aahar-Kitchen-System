@@ -38,3 +38,11 @@ kaggle datasets download -d tankitrathaur/indian-spices-images-data \
     -p raw/ingredient_images/indian-spices --unzip
 
 echo "Done."
+
+# ------------------------------------------------------------------
+# Optional: scrape the 55 raw pantry ingredients Kaggle does not have
+# (dals, flours, dairy, oils, leafy greens, raw proteins, dry fruits)
+# ------------------------------------------------------------------
+#   pip install "scrapling[all]" pillow imagehash requests
+#   scrapling install
+#   python scripts/scrape_ingredient_images.py --target 150
