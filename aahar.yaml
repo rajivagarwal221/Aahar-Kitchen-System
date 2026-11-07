@@ -1,0 +1,10 @@
+# AAhar food detector - YOLO dataset config
+# Classes are discovered at training time from the on-disk folder layout
+# (see notebooks/train_aahar_detector.ipynb, which rewrites `names:` below
+# before calling model.train). Leave `names:` empty here.
+
+path: ./data
+train: images/train
+val: images/val
+
+names: []

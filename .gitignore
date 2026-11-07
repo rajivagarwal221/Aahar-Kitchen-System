@@ -1,5 +1,21 @@
-node_modules
-dist
-*.local
-*.tsbuildinfo
+node_modules/
+dist/
+.vite/
 .DS_Store
+*.log
+
+# graphify
+graphify-out/
+
+# YOLO training (large binaries, local-only)
+data/images/**/*.jpg
+data/images/**/*.jpeg
+data/images/**/*.png
+data/images/**/*.webp
+data/labels/**/*.txt
+runs/
+*.pt
+*.onnx
+*.tflite
+!data/images/**/.gitkeep
+!data/labels/**/.gitkeep
