@@ -1,0 +1,4 @@
+# Large image datasets — download via scripts/fetch_datasets.sh, do NOT commit
+raw/dish_images/
+raw/ingredient_images/
+*.zip
