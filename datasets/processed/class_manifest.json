@@ -1,0 +1,1180 @@
+{
+  "indian_dishes": [
+    "achar",
+    "adhirasam",
+    "aloo gobi",
+    "aloo matar",
+    "aloo methi",
+    "aloo paratha",
+    "aloo puri",
+    "aloo shimla mirch",
+    "aloo tikki",
+    "amritsari kulcha",
+    "anarsa",
+    "anda curry",
+    "appam",
+    "ariselu",
+    "baingan bharta",
+    "balushahi",
+    "bandar laddu",
+    "basundi",
+    "bell pepper",
+    "besan cheela",
+    "besan laddu",
+    "bhatura",
+    "bhel puri",
+    "bhindi masala",
+    "biryani",
+    "boondi",
+    "boondi laddu",
+    "butter chicken",
+    "butter naan",
+    "chaas",
+    "chai",
+    "chak hao kheer",
+    "cham cham",
+    "chana masala",
+    "chapati",
+    "chhena kheeri",
+    "chicken razala",
+    "chicken tikka",
+    "chicken tikka masala",
+    "chikki",
+    "chilli potato",
+    "chivda",
+    "chole bhature",
+    "daal baati churma",
+    "daal puri",
+    "dal",
+    "dal khichdi",
+    "dal makhani",
+    "dal tadka",
+    "dharwad pedha",
+    "dhokla",
+    "doodhpak",
+    "dosa",
+    "double ka meetha",
+    "dum aloo",
+    "falooda",
+    "fish curry",
+    "gajar ka halwa",
+    "garlic naan",
+    "gavvalu",
+    "ghevar",
+    "gobi manchurian",
+    "grapes",
+    "gujhia",
+    "gujiya",
+    "gulab jamun",
+    "hara bhara kabab",
+    "idiyappam",
+    "idli",
+    "imarti",
+    "jalebi",
+    "kachori",
+    "kadai paneer",
+    "kadhi pakoda",
+    "kajjikaya",
+    "kaju katli",
+    "kakinada khaja",
+    "kalakand",
+    "karela bharta",
+    "kathi roll",
+    "kebabs",
+    "khakhra",
+    "khandvi",
+    "kheer",
+    "khichdi",
+    "kofta",
+    "kulfi",
+    "kuzhi paniyaram",
+    "lassi",
+    "ledikeni",
+    "litti chokha",
+    "lyangcha",
+    "maach jhol",
+    "makki di roti sarson da saag",
+    "malapua",
+    "masala dosa",
+    "masala papad",
+    "medu vada",
+    "misal pav",
+    "mishti doi",
+    "missi roti",
+    "modak",
+    "momos",
+    "moong dal halwa",
+    "murukku",
+    "mysore pak",
+    "naan",
+    "navratan korma",
+    "navrattan korma",
+    "neer dosa",
+    "onion pakoda",
+    "pakoda",
+    "palak paneer",
+    "paneer butter masala",
+    "paneer masala",
+    "pani puri",
+    "paniyaram",
+    "papad",
+    "papdi chaat",
+    "paratha",
+    "patrode",
+    "pav bhaji",
+    "peanut chikki",
+    "peda",
+    "phirni",
+    "pithe",
+    "poha",
+    "pongal",
+    "poornalu",
+    "pootharekulu",
+    "puri bhaji",
+    "qubani ka meetha",
+    "rabri",
+    "raj kachori",
+    "rajma",
+    "rajma chawal",
+    "ras malai",
+    "rasgulla",
+    "rava dosa",
+    "sabudana khichdi",
+    "sabudana vada",
+    "samosa",
+    "sandesh",
+    "seekh kebab",
+    "set dosa",
+    "sev puri",
+    "shankarpali",
+    "sheer khurma",
+    "sheer korma",
+    "sheera",
+    "shrikhand",
+    "sohan halwa",
+    "sohan papdi",
+    "solkadhi",
+    "soy beans",
+    "sprouts",
+    "stuffed karela",
+    "sutar feni",
+    "thali",
+    "thukpa",
+    "unni appam",
+    "uttapam",
+    "vada pav"
+  ],
+  "produce_ingredients": [
+    "apple",
+    "banana",
+    "beetroot",
+    "cabbage",
+    "capsicum",
+    "carrot",
+    "cauliflower",
+    "chilli pepper",
+    "corn",
+    "cucumber",
+    "eggplant",
+    "garlic",
+    "ginger",
+    "grape",
+    "jalepeno",
+    "kiwi",
+    "lemon",
+    "lettuce",
+    "mango",
+    "onion",
+    "orange",
+    "paprika",
+    "pear",
+    "peas",
+    "pineapple",
+    "pomegranate",
+    "potato",
+    "raddish",
+    "radish",
+    "spinach",
+    "sweet potato",
+    "sweetcorn",
+    "sweetpotato",
+    "tomato",
+    "turnip",
+    "watermelon"
+  ],
+  "spices": [
+    "asafoetida",
+    "bay leaf",
+    "black cardamom",
+    "black pepper",
+    "caraway seeds",
+    "cinnamom stick",
+    "cloves",
+    "coriander seeds",
+    "cubeb pepper",
+    "cumin seeds",
+    "dry ginger",
+    "dry red chilly",
+    "fennel seeds",
+    "green cardamom",
+    "mace",
+    "nutmeg",
+    "poppy seeds",
+    "star anise",
+    "stone flowers"
+  ],
+  "excluded_non_indian": [
+    "apple pie",
+    "bagels",
+    "banana chips",
+    "brownie",
+    "burger",
+    "cake",
+    "canned potatoes",
+    "chicken pizza",
+    "chicken wings",
+    "chop suey",
+    "chow mein",
+    "cooked oatmeal",
+    "cooked pasta",
+    "cooked rice",
+    "doughnut",
+    "fried chicken",
+    "fried fish",
+    "fried rice",
+    "garlic bread",
+    "grilled sandwich",
+    "hot dogs",
+    "ice cream",
+    "lemonade",
+    "macaroni salad",
+    "margherita pizza",
+    "muffin",
+    "omelette",
+    "pan cake",
+    "pan fried prawns",
+    "paneer pizza",
+    "pepperoni pizza",
+    "pizza",
+    "popcorn",
+    "sandwich",
+    "scrambled eggs",
+    "shelled soy bean",
+    "spring rolls",
+    "sunny side up eggs",
+    "taco",
+    "tiramisu",
+    "toast",
+    "veggie burger",
+    "waffle"
+  ],
+  "source_map": {
+    "kebabs": [
+      "kashyap"
+    ],
+    "dal khichdi": [
+      "kashyap"
+    ],
+    "lettuce": [
+      "fruitveg_train",
+      "kashyap"
+    ],
+    "papdi chaat": [
+      "kashyap"
+    ],
+    "bandar laddu": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "onion": [
+      "fruitveg_train",
+      "kashyap"
+    ],
+    "rabri": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "bhel puri": [
+      "kashyap"
+    ],
+    "pongal": [
+      "kashyap"
+    ],
+    "jalebi": [
+      "foodies",
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "makki di roti sarson da saag": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "canned potatoes": [
+      "kashyap"
+    ],
+    "bhatura": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "chicken tikka": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "neer dosa": [
+      "kashyap"
+    ],
+    "kiwi": [
+      "fruitveg_train",
+      "kashyap"
+    ],
+    "idli": [
+      "foodies",
+      "kashyap"
+    ],
+    "cauliflower": [
+      "fruitveg_train",
+      "kashyap"
+    ],
+    "chicken razala": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "onion pakoda": [
+      "kashyap"
+    ],
+    "waffle": [
+      "kashyap"
+    ],
+    "dharwad pedha": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "pineapple": [
+      "fruitveg_train",
+      "kashyap"
+    ],
+    "kadhi pakoda": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "pan fried prawns": [
+      "kashyap"
+    ],
+    "paniyaram": [
+      "kashyap"
+    ],
+    "chak hao kheer": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "puri bhaji": [
+      "kashyap"
+    ],
+    "boondi laddu": [
+      "kashyap"
+    ],
+    "naan": [
+      "foodies",
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "double ka meetha": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "sutar feni": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "idiyappam": [
+      "kashyap"
+    ],
+    "sohan papdi": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "raj kachori": [
+      "kashyap"
+    ],
+    "appam": [
+      "kashyap"
+    ],
+    "kaju katli": [
+      "kashyap"
+    ],
+    "taco": [
+      "kashyap"
+    ],
+    "modak": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "sandesh": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "paprika": [
+      "fruitveg_train",
+      "kashyap"
+    ],
+    "daal puri": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "shankarpali": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "scrambled eggs": [
+      "kashyap"
+    ],
+    "chow mein": [
+      "kashyap"
+    ],
+    "sandwich": [
+      "kashyap"
+    ],
+    "chai": [
+      "kashyap"
+    ],
+    "grape": [
+      "kashyap"
+    ],
+    "butter chicken": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "imarti": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "spring rolls": [
+      "kashyap"
+    ],
+    "chana masala": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "missi roti": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "fried chicken": [
+      "kashyap"
+    ],
+    "tiramisu": [
+      "kashyap"
+    ],
+    "vada pav": [
+      "foodies",
+      "kashyap"
+    ],
+    "sunny side up eggs": [
+      "kashyap"
+    ],
+    "stuffed karela": [
+      "kashyap"
+    ],
+    "garlic naan": [
+      "kashyap"
+    ],
+    "poornalu": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "achar": [
+      "kashyap"
+    ],
+    "chapati": [
+      "foodies",
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "palak paneer": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "paneer masala": [
+      "kashyap"
+    ],
+    "rasgulla": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "besan cheela": [
+      "foodies",
+      "kashyap"
+    ],
+    "fried fish": [
+      "kashyap"
+    ],
+    "doodhpak": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "lemonade": [
+      "kashyap"
+    ],
+    "hot dogs": [
+      "kashyap"
+    ],
+    "daal baati churma": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "capsicum": [
+      "fruitveg_train",
+      "kashyap"
+    ],
+    "apple": [
+      "fruitveg_train",
+      "kashyap"
+    ],
+    "rajma chawal": [
+      "kashyap"
+    ],
+    "fried rice": [
+      "kashyap"
+    ],
+    "kathi roll": [
+      "foodies",
+      "kashyap"
+    ],
+    "cham cham": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "basundi": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "misal pav": [
+      "kashyap"
+    ],
+    "samosa": [
+      "foodies",
+      "kashyap"
+    ],
+    "mango": [
+      "fruitveg_train",
+      "kashyap"
+    ],
+    "margherita pizza": [
+      "kashyap"
+    ],
+    "ariselu": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "peda": [
+      "kashyap"
+    ],
+    "orange": [
+      "fruitveg_train",
+      "kashyap"
+    ],
+    "chaas": [
+      "kashyap"
+    ],
+    "chicken wings": [
+      "kashyap"
+    ],
+    "chicken pizza": [
+      "kashyap"
+    ],
+    "aloo gobi": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "ginger": [
+      "fruitveg_train",
+      "kashyap"
+    ],
+    "aloo tikki": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "banana chips": [
+      "kashyap"
+    ],
+    "gajar ka halwa": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "karela bharta": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "turnip": [
+      "fruitveg_train",
+      "kashyap"
+    ],
+    "kalakand": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "kadai paneer": [
+      "foodies",
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "bagels": [
+      "kashyap"
+    ],
+    "sweet potato": [
+      "kashyap"
+    ],
+    "ice cream": [
+      "kashyap"
+    ],
+    "gobi manchurian": [
+      "kashyap"
+    ],
+    "ghevar": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "kuzhi paniyaram": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "omelette": [
+      "kashyap"
+    ],
+    "kheer": [
+      "kashyap"
+    ],
+    "popcorn": [
+      "kashyap"
+    ],
+    "mishti doi": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "masala dosa": [
+      "kashyap"
+    ],
+    "kakinada khaja": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "uttapam": [
+      "kashyap"
+    ],
+    "chicken tikka masala": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "dal makhani": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "chilli pepper": [
+      "fruitveg_train",
+      "kashyap"
+    ],
+    "falooda": [
+      "kashyap"
+    ],
+    "maach jhol": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "adhirasam": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "gujhia": [
+      "kashyap"
+    ],
+    "sheer khurma": [
+      "kashyap"
+    ],
+    "gavvalu": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "baingan bharta": [
+      "kashyap"
+    ],
+    "kachori": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "phirni": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "garlic bread": [
+      "kashyap"
+    ],
+    "veggie burger": [
+      "kashyap"
+    ],
+    "set dosa": [
+      "kashyap"
+    ],
+    "poha": [
+      "foodies",
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "boondi": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "sprouts": [
+      "kashyap"
+    ],
+    "patrode": [
+      "kashyap"
+    ],
+    "pani puri": [
+      "foodies",
+      "kashyap"
+    ],
+    "amritsari kulcha": [
+      "kashyap"
+    ],
+    "solkadhi": [
+      "kashyap"
+    ],
+    "medu vada": [
+      "kashyap"
+    ],
+    "banana": [
+      "fruitveg_train",
+      "kashyap"
+    ],
+    "momos": [
+      "kashyap"
+    ],
+    "qubani ka meetha": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "apple pie": [
+      "kashyap"
+    ],
+    "burger": [
+      "kashyap"
+    ],
+    "mysore pak": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "chhena kheeri": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "pootharekulu": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "chilli potato": [
+      "kashyap"
+    ],
+    "watermelon": [
+      "fruitveg_train",
+      "kashyap"
+    ],
+    "peas": [
+      "fruitveg_train",
+      "kashyap"
+    ],
+    "paneer butter masala": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "chivda": [
+      "kashyap"
+    ],
+    "masala papad": [
+      "kashyap"
+    ],
+    "malapua": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "kulfi": [
+      "kashyap"
+    ],
+    "shelled soy bean": [
+      "kashyap"
+    ],
+    "papad": [
+      "kashyap"
+    ],
+    "corn": [
+      "fruitveg_train",
+      "kashyap"
+    ],
+    "lassi": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "pear": [
+      "fruitveg_train",
+      "kashyap"
+    ],
+    "butter naan": [
+      "kashyap"
+    ],
+    "pan cake": [
+      "kashyap"
+    ],
+    "bhindi masala": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "dal tadka": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "grilled sandwich": [
+      "kashyap"
+    ],
+    "thali": [
+      "kashyap"
+    ],
+    "kajjikaya": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "radish": [
+      "kashyap"
+    ],
+    "chikki": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "aloo puri": [
+      "kashyap"
+    ],
+    "pav bhaji": [
+      "foodies",
+      "kashyap"
+    ],
+    "aloo paratha": [
+      "kashyap"
+    ],
+    "rava dosa": [
+      "kashyap"
+    ],
+    "sabudana khichdi": [
+      "kashyap"
+    ],
+    "chole bhature": [
+      "foodies",
+      "kashyap"
+    ],
+    "sheer korma": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "carrot": [
+      "fruitveg_train",
+      "kashyap"
+    ],
+    "paneer pizza": [
+      "kashyap"
+    ],
+    "pithe": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "sev puri": [
+      "kashyap"
+    ],
+    "peanut chikki": [
+      "kashyap"
+    ],
+    "macaroni salad": [
+      "kashyap"
+    ],
+    "khakhra": [
+      "kashyap"
+    ],
+    "anarsa": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "shrikhand": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "khandvi": [
+      "kashyap"
+    ],
+    "kofta": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "lyangcha": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "pomegranate": [
+      "fruitveg_train",
+      "kashyap"
+    ],
+    "sohan halwa": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "tomato": [
+      "fruitveg_train",
+      "kashyap"
+    ],
+    "biryani": [
+      "foodies",
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "besan laddu": [
+      "kashyap"
+    ],
+    "chop suey": [
+      "kashyap"
+    ],
+    "cooked pasta": [
+      "kashyap"
+    ],
+    "unni appam": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "beetroot": [
+      "fruitveg_train",
+      "kashyap"
+    ],
+    "anda curry": [
+      "kashyap"
+    ],
+    "cooked rice": [
+      "kashyap"
+    ],
+    "ras malai": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "cake": [
+      "kashyap"
+    ],
+    "murukku": [
+      "kashyap"
+    ],
+    "lemon": [
+      "fruitveg_train",
+      "kashyap"
+    ],
+    "aloo shimla mirch": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "cooked oatmeal": [
+      "kashyap"
+    ],
+    "pepperoni pizza": [
+      "kashyap"
+    ],
+    "gulab jamun": [
+      "foodies",
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "sheera": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "navratan korma": [
+      "kashyap"
+    ],
+    "paratha": [
+      "kashyap"
+    ],
+    "spinach": [
+      "fruitveg_train",
+      "kashyap"
+    ],
+    "garlic": [
+      "fruitveg_train",
+      "kashyap"
+    ],
+    "balushahi": [
+      "kashyap"
+    ],
+    "khichdi": [
+      "kashyap"
+    ],
+    "fish curry": [
+      "kashyap"
+    ],
+    "dum aloo": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "gujiya": [
+      "kashyap"
+    ],
+    "toast": [
+      "kashyap"
+    ],
+    "pizza": [
+      "kashyap"
+    ],
+    "dhokla": [
+      "foodies",
+      "kashyap"
+    ],
+    "ledikeni": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "sabudana vada": [
+      "kashyap"
+    ],
+    "seekh kebab": [
+      "kashyap"
+    ],
+    "rajma": [
+      "kashyap"
+    ],
+    "hara bhara kabab": [
+      "kashyap"
+    ],
+    "cabbage": [
+      "fruitveg_train",
+      "kashyap"
+    ],
+    "moong dal halwa": [
+      "kashyap"
+    ],
+    "litti chokha": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "cucumber": [
+      "fruitveg_train",
+      "kashyap"
+    ],
+    "doughnut": [
+      "kashyap"
+    ],
+    "pakoda": [
+      "foodies",
+      "kashyap"
+    ],
+    "muffin": [
+      "kashyap"
+    ],
+    "aloo matar": [
+      "foodies",
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "brownie": [
+      "kashyap"
+    ],
+    "aloo methi": [
+      "kashyap",
+      "souravbanerjee"
+    ],
+    "thukpa": [
+      "kashyap"
+    ],
+    "navrattan korma": [
+      "souravbanerjee"
+    ],
+    "dal": [
+      "foodies"
+    ],
+    "dosa": [
+      "foodies"
+    ],
+    "raddish": [
+      "fruitveg_train"
+    ],
+    "soy beans": [
+      "fruitveg_train"
+    ],
+    "potato": [
+      "fruitveg_train"
+    ],
+    "eggplant": [
+      "fruitveg_train"
+    ],
+    "grapes": [
+      "fruitveg_train"
+    ],
+    "sweetpotato": [
+      "fruitveg_train"
+    ],
+    "bell pepper": [
+      "fruitveg_train"
+    ],
+    "jalepeno": [
+      "fruitveg_train"
+    ],
+    "sweetcorn": [
+      "fruitveg_train"
+    ],
+    "cumin seeds": [
+      "spices"
+    ],
+    "asafoetida": [
+      "spices"
+    ],
+    "dry red chilly": [
+      "spices"
+    ],
+    "nutmeg": [
+      "spices"
+    ],
+    "green cardamom": [
+      "spices"
+    ],
+    "poppy seeds": [
+      "spices"
+    ],
+    "cloves": [
+      "spices"
+    ],
+    "cinnamom stick": [
+      "spices"
+    ],
+    "cubeb pepper": [
+      "spices"
+    ],
+    "black cardamom": [
+      "spices"
+    ],
+    "dry ginger": [
+      "spices"
+    ],
+    "mace": [
+      "spices"
+    ],
+    "coriander seeds": [
+      "spices"
+    ],
+    "black pepper": [
+      "spices"
+    ],
+    "star anise": [
+      "spices"
+    ],
+    "stone flowers": [
+      "spices"
+    ],
+    "fennel seeds": [
+      "spices"
+    ],
+    "bay leaf": [
+      "spices"
+    ],
+    "caraway seeds": [
+      "spices"
+    ]
+  }
+}
