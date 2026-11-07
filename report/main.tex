@@ -1,0 +1,573 @@
+%% AHAAR -- Kitchen System : IEEE-style Project Report
+%% Compile with pdflatex, then bibtex, then pdflatex x2
+%% Overleaf: upload main.tex, references.bib ; set compiler to pdfLaTeX
+\documentclass[journal,onecolumn,12pt]{IEEEtran}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{graphicx}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{url}
+\usepackage{hyperref}
+\usepackage{cite}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{tabularx}
+
+\hypersetup{colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue}
+
+\lstset{
+  basicstyle=\ttfamily\footnotesize,
+  breaklines=true,
+  columns=fullflexible,
+  frame=single,
+  showstringspaces=false
+}
+
+\begin{document}
+
+\title{AHAAR: An AI-Driven Household Kitchen Assistant for Indian Cuisine with CGM-Aware Nutritional Personalization}
+
+\author{%
+  Rajiv Agarwal, Alan Joseph, Aryan Raina\\
+  \textit{Group 19, Academic Year 2026--27}\\
+  \textit{Project Guide: Ms.\ Sharlene Rebeiro}%
+  \thanks{Manuscript prepared for the AHAAR Kitchen System project. Source code: \url{https://github.com/workspace220106/Aahar-Kitchen-System}}
+}
+
+\markboth{AHAAR Project Report, 2026--27}{Agarwal \MakeLowercase{\textit{et al.}}: AHAAR -- Kitchen System}
+
+\maketitle
+
+%====================================================================
+\begin{abstract}
+Household food waste, repetitive cooking decisions, and the lack of
+personalized dietary guidance remain persistent problems in Indian
+kitchens. We present \textbf{AHAAR}, a multi-page web application that
+turns a single photograph of the inside of a refrigerator into a ranked
+set of culturally-appropriate recipes, portioned per family member and
+re-ranked over time by each user's personal glycemic response captured
+through a Continuous Glucose Monitor (CGM). The frontend is already
+implemented in React, Vite, and TailwindCSS; this report proposes the
+complete backend, machine-learning, and database stack needed to
+operationalize it. The core technical contributions are: (1) a
+fridge-interior Indian ingredient detection dataset and a YOLOv11-based
+detector trained on it; (2) a cross-modal recipe-embedding index built
+over scraped Indian recipes, replacing hand-coded ingredient lists;
+(3) a hybrid nutrition-aware recipe recommender whose weights adapt to
+each family member's health profile; (4) a reference-object portion
+estimator that avoids the hardware cost of RGB-D sensors; and (5) a
+per-user CGM-aware recipe re-ranker inspired by the Weizmann Institute's
+personalized nutrition work. We ground every design choice in ten
+peer-reviewed IEEE papers spanning object detection, cross-modal recipe
+retrieval, nutrition-aware recommendation, portion estimation, and
+glucose-driven dietary monitoring. We describe the Java~26 Spring Boot
+backend, PostgreSQL schema, and Deep Java Library (DJL) training
+pipeline that realise these contributions, and present the dataset
+construction, evaluation metrics, and ablation plan that will produce
+the final results.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Food recognition, YOLO, Indian cuisine, recipe recommendation,
+continuous glucose monitoring, personalized nutrition, deep learning,
+Spring Boot, Deep Java Library, dietary assessment.
+\end{IEEEkeywords}
+
+%====================================================================
+\tableofcontents
+\vspace{1em}
+\hrule
+\vspace{1em}
+
+%====================================================================
+\section{Introduction}
+\IEEEPARstart{T}{he} question \textit{``what's for dinner?''} is asked
+in roughly 300~million Indian households every day. The answer is
+constrained by what is physically in the refrigerator, by cultural and
+regional cuisine preferences, by the age and health status of each
+family member, and -- for the roughly 101~million Indians living with
+diabetes -- by the glycemic impact of the chosen meal. No existing
+application addresses all four constraints simultaneously for Indian
+cuisine.
+
+AHAAR is an attempt to do exactly this. It is organized as a sequence
+of pages that mirror the real decision flow in a kitchen:
+\textit{Fridge Scan $\rightarrow$ Detection $\rightarrow$ Pantry $\rightarrow$ Recipes $\rightarrow$ Family Portions $\rightarrow$ Cook-along $\rightarrow$ Health}.
+The frontend already implements this flow; what remains is to replace
+the demonstration data with real machine-learning inference, a
+persistent database, a trained ingredient detector, a recipe retrieval
+index, a nutrition-aware ranker, and -- as the project's most
+differentiated contribution -- a glucose-response-aware personalisation
+layer.
+
+This report consolidates: (i) the current system's architecture;
+(ii) a critical review of ten IEEE papers that underpin our proposed
+upgrades; (iii) the complete proposed methodology, including a
+Java-26-based backend and ML training pipeline using the Deep Java
+Library; (iv) the data-collection and evaluation protocol; and
+(v) a discussion of the novelty, limitations, and future work.
+
+\textbf{Contributions.} We claim four contributions:
+\begin{enumerate}
+  \item A \emph{fridge-interior} Indian ingredient dataset -- distinct
+        from existing \emph{plated-meal} Indian food datasets
+        \cite{foodnet2017,indianfood10,indianfoodnet2023}.
+  \item A light-and-sharpness pre-filter that reduces label noise
+        during data collection and inference failure during use.
+  \item A unified multi-head architecture for detection,
+        portion-weight regression, and nutrition lookup -- in the
+        spirit of \cite{yolov11indian2025} but extended with recipe
+        retrieval.
+  \item A per-user glucose-response-aware recipe ranker for Indian
+        cuisine, bridging the CGM-macronutrient literature
+        \cite{huo2019cgm} with cross-modal recipe retrieval
+        \cite{marin2021recipe1m}.
+\end{enumerate}
+
+%====================================================================
+\section{Related Work}
+\label{sec:related}
+
+We organise the related work along the five technical sub-problems
+addressed by AHAAR.
+
+\subsection{Object Detection and Food Recognition}
+
+\textbf{YOLO}~\cite{redmon2016yolo} reframed object detection as a
+single regression problem, predicting bounding boxes and class
+probabilities in one network pass. This real-time, end-to-end approach
+is directly suitable for on-device fridge scanning, where latency
+budgets rule out two-stage detectors.
+
+\textbf{FoodNet}~\cite{foodnet2017}, published in \textit{IEEE Signal
+Processing Letters}, proposed an ensemble of deep CNNs for food
+classification and -- importantly for us -- introduced the first
+Indian food image database (50 classes, 100 images per class). It
+established the baseline that domain-specific ensembles beat generic
+backbones on Indian cuisine.
+
+\textbf{IndianFood10 / YOLOv4 Platters}~\cite{indianfood10} applied
+transfer learning with YOLOv4 to a 10-class dataset of staple Indian
+plates and reported 91.8\% mAP, framing the central difficulties as
+``lack of annotated Indian food datasets, non-distinct boundaries
+between dishes on one plate, and high intra-class variation.''
+
+\textbf{YOLO V11m Indian Cuisine}~\cite{yolov11indian2025}, the most
+recent IEEE paper in this space, combined 17-class Indian food
+detection with portion-based nutritional estimation and reached
+\(\text{mAP}@50 = 0.94\). Its two-stage pipeline (detect $\rightarrow$
+look up nutrition) is the architectural template we extend.
+
+\subsection{Cross-Modal Recipe Retrieval}
+
+\textbf{im2recipe}~\cite{salvador2017im2recipe}, presented at CVPR
+2017, learns a joint embedding of recipe text and food images so that
+either modality can retrieve the other. This is the key idea that
+replaces our current string-level matching
+(\verb|uses: ['spinach']|) with semantically-robust retrieval
+(\textit{spinach} $\approx$ \textit{palak} $\approx$ \textit{saag}).
+
+\textbf{Recipe1M+}~\cite{marin2021recipe1m}, the IEEE TPAMI extension
+of im2recipe, scaled this joint embedding to more than one million
+recipes and 13 million images and reported near-human retrieval
+performance. We adopt its training objective and dataset conventions.
+
+\textbf{Inverse Cooking}~\cite{salvador2019inverse} (CVPR 2019)
+predicts an unordered set of ingredients from an image and then
+generates full cooking instructions. The set-prediction formulation
+sidesteps per-item occlusion in a crowded fridge and inspires our
+``Lazy mode'' feature.
+
+\subsection{Nutrition-Aware Recommendation}
+
+\textbf{Yera-Toledo \emph{et al.}}~\cite{yeratoledo2019access}, in
+\textit{IEEE Access} 2019, proposed a hybrid food recommender that
+combines content-based filtering with explicit nutritional constraints.
+Its weighted scoring formulation underlies our per-family-member
+re-ranking weights.
+
+\subsection{Portion and Volume Estimation}
+
+\textbf{Gao, Lo, and Lo}~\cite{gao2018bsn} (IEEE BSN 2018) estimated
+food volume from a wearable camera using SLAM, a modified convex-hull
+algorithm, and a 3D mesh reconstruction step. The paper is instructive
+primarily for what it concludes: reliable monocular volume estimation
+is \emph{hard} without either depth sensors or a visible reference
+object. We adopt the latter.
+
+\subsection{CGM-Driven Dietary Monitoring}
+
+\textbf{Huo \emph{et al.}}~\cite{huo2019cgm} (IEEE BHI 2019) showed
+that meal \emph{macronutrient composition} can be inferred from the
+glucose curve that follows the meal. Together with the Zeevi
+\emph{et al.} personalised-nutrition work from \textit{Cell}
+(cited for context only), this is the scientific basis for our
+\texttt{/health} page: GI is not universal, so AHAAR should rank
+recipes by \emph{this user's} predicted glucose response, not a
+textbook GI table.
+
+\medskip
+Table~\ref{tab:papermap} summarises how each paper maps to a
+component of the AHAAR system.
+
+\begin{table}[!t]
+\caption{Mapping of IEEE references to AHAAR system components.}
+\label{tab:papermap}
+\centering
+\footnotesize
+\begin{tabularx}{\linewidth}{l l X}
+\toprule
+\textbf{Ref.} & \textbf{Venue} & \textbf{AHAAR component informed} \\
+\midrule
+\cite{redmon2016yolo}        & CVPR 2016        & \texttt{/scan}, \texttt{/detect} base detector \\
+\cite{foodnet2017}           & IEEE SPL 2017    & Indian-food backbone, ensembling \\
+\cite{indianfood10}          & IEEE ICDEW 2022  & Pre-training dataset, YOLO transfer \\
+\cite{yolov11indian2025}     & IEEE CICN 2025   & Detection + nutrition pipeline \\
+\cite{salvador2017im2recipe} & IEEE CVPR 2017   & Recipe embedding (\texttt{/recipes}) \\
+\cite{marin2021recipe1m}     & IEEE TPAMI 2021  & Recipe1M+ scale, loss \\
+\cite{salvador2019inverse}   & IEEE CVPR 2019   & ``Lazy mode'', set prediction \\
+\cite{yeratoledo2019access}  & IEEE Access 2019 & Nutrition-weighted ranking \\
+\cite{gao2018bsn}            & IEEE BSN 2018    & Portion sizing design choice \\
+\cite{huo2019cgm}            & IEEE BHI 2019    & \texttt{/health} CGM re-ranker \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+%====================================================================
+\section{Existing System Architecture}
+\label{sec:existing}
+
+\begin{figure*}[!t]
+\centering
+\fbox{\begin{minipage}{0.95\textwidth}
+\centering
+\vspace{3em}
+\textit{[Figure~1: AHAAR frontend page flow -- /scan -> /detect -> /pantry -> /recipes -> /family -> /cook -> /health. Replace this placeholder with a system-flow screenshot or Mermaid-rendered diagram.]}
+\vspace{3em}
+\end{minipage}}
+\caption{Current AHAAR page flow. Each box corresponds to a route in
+the React single-page application.}
+\label{fig:flow}
+\end{figure*}
+
+AHAAR is implemented as a React~18 single-page application built with
+Vite, written in TypeScript, and styled with TailwindCSS. The project
+layout is:
+
+\begin{lstlisting}
+src/
+  App.tsx         # routing
+  main.tsx
+  pages/          # one file per route
+  components/     # reusable UI
+  lib/
+    data.ts       # demo recipes + ingredients
+    quality.ts    # on-device light/sharpness checks
+    store.tsx    # client state
+  index.css
+public/
+tailwind.config.ts
+vite.config.ts
+vercel.json       # SPA rewrites for deep links
+\end{lstlisting}
+
+\subsection{Pages and Routes}
+
+\begin{table}[!t]
+\caption{Routes of the current AHAAR frontend.}
+\label{tab:routes}
+\centering
+\footnotesize
+\begin{tabularx}{\linewidth}{l l X}
+\toprule
+\textbf{Route} & \textbf{Page} & \textbf{Function} \\
+\midrule
+\texttt{/}       & Home        & Overview and links to all features \\
+\texttt{/scan}   & Fridge scan & Live camera; on-device light and
+                                 sharpness checks; capture / upload \\
+\texttt{/detect} & Detection   & Bounding boxes with confidence;
+                                 remove wrong items \\
+\texttt{/pantry} & Pantry      & Editable quantities; ingredient
+                                 $\rightarrow$ dish $\rightarrow$ nutrient graph \\
+\texttt{/recipes}& Recipes     & Filters; match rings; ``Why this?''
+                                 reason bars \\
+\texttt{/family} & Family      & Per-person portions by age and
+                                 activity, with totals to cook \\
+\texttt{/cook}   & Cook-along  & One step at a time; working timer
+                                 (keyboard controlled) \\
+\texttt{/health} & Health      & Planned CGM-aware portioning
+                                 (currently unimplemented) \\
+\texttt{/about}  & About       & Pipeline, stack, privacy, team \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Current Limitations}
+
+\begin{itemize}
+  \item Detection boxes are a static demonstration, not live inference.
+  \item Only six ingredients and four recipes are supported, all
+        hand-coded in \texttt{data.ts}.
+  \item Recipe matching uses string equality on ingredient IDs,
+        failing on synonyms and partial pantries.
+  \item ``Why this?'' bars display hard-coded numbers.
+  \item The \texttt{/health} page is a placeholder.
+  \item There is no backend, no database, and no model artefact.
+\end{itemize}
+
+\S\ref{sec:proposed} addresses each of these limitations.
+
+%====================================================================
+\section{Proposed Methodology}
+\label{sec:proposed}
+
+\subsection{Fridge-Interior Ingredient Detection}
+
+Existing Indian food datasets~\cite{foodnet2017, indianfood10,
+indianfoodnet2023} contain \emph{plated} meals -- not raw ingredients
+inside a refrigerator. We therefore construct \textbf{AHAAR-Fridge},
+a dataset of 2000+ photographs across 20 ingredient classes commonly
+found in Indian kitchens (tomato, paneer, onion, green chilli, coriander,
+curry leaves, ginger, garlic, potato, spinach, okra, cauliflower,
+carrot, lemon, yoghurt, milk, atta, rice, mustard oil, ghee). Each
+image is annotated with YOLO-format bounding boxes.
+
+The detector is a YOLOv11 model pretrained on COCO, fine-tuned first
+on IndianFood20~\cite{indianfood10}, and finally fine-tuned on
+AHAAR-Fridge. The two-stage transfer protocol follows
+\cite{indianfood10, yolov11indian2025}.
+
+The on-device quality gate from \texttt{src/lib/quality.ts} is retained
+as a pre-filter -- an element absent from
+\cite{redmon2016yolo,foodnet2017,indianfood10,yolov11indian2025}.
+
+\subsection{Semantic Recipe Retrieval}
+
+We scrape approximately 5{,}000 Indian recipes from publicly available
+sources (Hebbar's Kitchen, Archana's Kitchen, cookpad). Each recipe
+is tokenised and encoded with a multilingual sentence-transformer to
+produce a 768-dimensional embedding. The current pantry is encoded by
+concatenating detected ingredient names (with their quantities) and
+embedding the resulting string. Recipes are ranked by cosine
+similarity, following the joint-embedding objective of
+\cite{salvador2017im2recipe, marin2021recipe1m}.
+
+\subsection{Nutrition-Weighted Ranking}
+
+Inspired by \cite{yeratoledo2019access}, the final score for recipe
+\(r\) and family member \(m\) is
+\begin{equation}
+\mathrm{score}(r, m) = w_1 \, s_{\text{match}}(r)
+                     + w_2 \, s_{\text{diet}}(r, m)
+                     - w_3 \, \mathrm{GL}(r)
+                     + w_4 \, s_{\text{portion}}(r, m),
+\label{eq:rank}
+\end{equation}
+where \(s_{\text{match}}\) is the pantry--recipe cosine similarity,
+\(s_{\text{diet}}\) is a soft dietary-compatibility indicator,
+\(\mathrm{GL}(r)\) is the recipe's glycemic load, and
+\(s_{\text{portion}}\) is a per-member portion-fit score. Weights
+\((w_1,\ldots,w_4)\) are per-member and are updated by the CGM
+feedback layer (see \S\ref{sec:cgm}).
+
+\subsection{Set-Based ``Lazy Mode''}
+
+Following Inverse Cooking~\cite{salvador2019inverse}, we add a one-tap
+mode that bypasses the pantry edit step: the image is passed to a
+set-prediction head that emits an unordered set of ingredients, which
+is then used as the pantry input to Eq.~\ref{eq:rank}.
+
+\subsection{Portion Estimation with a Reference Object}
+
+Rather than attempting monocular volume estimation
+(explicitly discouraged by~\cite{gao2018bsn}), we require the user to
+place a ₹10 coin (26.5~mm diameter) in frame for pantry photographs
+that need a true size estimate. The coin provides a pixel-to-millimetre
+scale factor, converting detected bounding-box pixel area into a
+reasonable gram-weight estimate via per-ingredient density priors.
+
+\subsection{CGM-Aware Personalisation}
+\label{sec:cgm}
+
+The \texttt{/health} page accepts CGM exports (Abbott LibreView CSV,
+Dexcom Clarity CSV). For each logged AHAAR meal, we extract the
+2-hour post-prandial glucose window and compute the area under the
+curve (AUC) above baseline. A per-user ridge regression maps meal
+macro-nutrient features (carbohydrate load, fibre, fat, protein,
+glycemic load) to AUC. Over time the fitted coefficients re-weight
+Eq.~\ref{eq:rank} by raising \(w_3\) for users with high glucose
+sensitivity. The approach follows the macronutrient-from-CGM
+findings of~\cite{huo2019cgm}.
+
+%====================================================================
+\section{Backend and Database Design}
+\label{sec:backend}
+
+\subsection{Technology Stack}
+
+\begin{itemize}
+  \item \textbf{Language:} Java~26 (as of GA, September 2026).
+  \item \textbf{Framework:} Spring Boot 3.4 (web, data-jpa, security).
+  \item \textbf{Database:} PostgreSQL 16 with Flyway migrations.
+  \item \textbf{ML runtime:} Deep Java Library (DJL) 0.30 with the
+        PyTorch engine, loading an ONNX-exported YOLOv11 model.
+  \item \textbf{Build:} Maven, with a Docker Compose profile for local
+        Postgres.
+\end{itemize}
+
+\subsection{Database Schema (abridged)}
+
+\begin{lstlisting}[language=SQL]
+CREATE TABLE ingredient (
+  id        TEXT PRIMARY KEY,
+  name      TEXT NOT NULL,
+  unit      TEXT NOT NULL,
+  kcal_100g NUMERIC,
+  carb_100g NUMERIC,
+  gi        NUMERIC
+);
+
+CREATE TABLE recipe (
+  id       TEXT PRIMARY KEY,
+  name     TEXT,
+  minutes  INT,
+  tags     TEXT[],
+  embedding VECTOR(768)
+);
+
+CREATE TABLE recipe_ingredient (
+  recipe_id TEXT REFERENCES recipe(id),
+  ing_id    TEXT REFERENCES ingredient(id),
+  grams     NUMERIC,
+  PRIMARY KEY (recipe_id, ing_id)
+);
+
+CREATE TABLE family_member (
+  id SERIAL PRIMARY KEY,
+  user_id INT, name TEXT, age INT,
+  activity TEXT, conditions TEXT[]
+);
+
+CREATE TABLE cgm_reading (
+  member_id INT, ts TIMESTAMPTZ,
+  glucose_mg_dl NUMERIC
+);
+
+CREATE TABLE meal_log (
+  id SERIAL PRIMARY KEY, member_id INT,
+  recipe_id TEXT, grams NUMERIC, ts TIMESTAMPTZ
+);
+\end{lstlisting}
+
+\subsection{REST API Surface}
+
+\begin{tabular}{ll}
+\toprule
+\textbf{Endpoint}             & \textbf{Purpose} \\
+\midrule
+\texttt{POST /api/detect}     & Image upload $\to$ bounding boxes \\
+\texttt{GET/PUT /api/pantry}  & Pantry CRUD \\
+\texttt{GET /api/recipes}     & Ranked recipes for current pantry \\
+\texttt{GET/POST /api/family} & Family members, profiles \\
+\texttt{POST /api/cgm/upload} & CGM CSV ingestion \\
+\texttt{GET /api/health/me}   & Fitted per-user response model \\
+\bottomrule
+\end{tabular}
+
+%====================================================================
+\section{Dataset Construction and Training Protocol}
+\label{sec:dataset}
+
+\subsection{AHAAR-Fridge Dataset}
+
+Images are captured by all three authors with phone cameras under
+realistic household conditions: tube-light, LED, warm bulb, and door
+light. Each class has 100 training images and 25 validation images.
+Images are labelled using the open-source \textit{LabelImg} tool in
+YOLO format. The on-device quality gate from \texttt{quality.ts}
+rejects blurred or under-exposed captures before they enter the
+dataset, reducing label noise.
+
+\subsection{Training Pipeline}
+
+Training is done once in Python/Ultralytics for convenience and the
+weights are then exported to ONNX. The ONNX model is served through
+DJL at inference time in the Java~26 backend. For transparency, we
+also include a DJL-only training loop (ResNet-18 classification head)
+to demonstrate end-to-end Java training per the project's learning
+goal.
+
+%====================================================================
+\section{Evaluation Plan}
+\label{sec:eval}
+
+\begin{itemize}
+  \item \textbf{Detection:} mAP@50, mAP@50:95, per-class precision and
+        recall on AHAAR-Fridge val split.
+  \item \textbf{Retrieval:} Recall@1, Recall@5, median rank on a
+        held-out 500-recipe query set.
+  \item \textbf{Portion:} MAPE in grams on a 100-image coin-reference
+        validation set.
+  \item \textbf{CGM re-ranker:} RMSE of AUC prediction per user;
+        A/B comparison of recipe acceptance rate before and after
+        enabling the re-ranker (small user study, $n = 10$).
+  \item \textbf{System:} End-to-end latency on a Pixel-class phone and
+        on a laptop, broken down per stage.
+\end{itemize}
+
+%====================================================================
+\section{Discussion}
+\label{sec:discussion}
+
+AHAAR deliberately refuses two tempting shortcuts: (i) relying on an
+off-the-shelf Indian food detector trained on plated meals, and
+(ii) performing monocular volume estimation without a reference
+object. The first fails because fridges are a different visual
+domain; the second fails because, as \cite{gao2018bsn} documents,
+single-image volume is unreliable without depth or scale. The
+reference-coin design is honest about this limit.
+
+The CGM-aware re-ranker is the project's most differentiated
+contribution. It is the point at which AHAAR stops being yet another
+recipe app and becomes a personalised health tool for the Indian
+household. No current product combines Indian cuisine recipe retrieval
+with CGM-driven glycemic personalisation.
+
+\textbf{Threats to validity.} Our CGM dataset will be small
+($<10$ users). The glucose-response model will therefore be
+illustrative, not clinical. We will state this limitation explicitly
+and target a larger study as future work.
+
+%====================================================================
+\section{Conclusion and Future Work}
+\label{sec:conclusion}
+
+We have presented AHAAR, a kitchen assistant for Indian households
+that spans fridge scanning, ingredient detection, pantry management,
+recipe recommendation, per-member portioning, step-by-step cooking,
+and CGM-aware health personalisation. The frontend is complete; this
+report proposes the backend, ML, database, and dataset work that will
+turn the demonstration into a working system. Every design choice is
+anchored in a peer-reviewed IEEE paper, and the resulting architecture
+is both pedagogically useful (as a Java-26 ML learning project) and
+scientifically novel (as a CGM-aware Indian-cuisine assistant).
+
+Future work includes: (i) scaling AHAAR-Fridge to 50 classes with
+semi-supervised labelling, (ii) extending the CGM loop to Type-2
+diabetic cohorts under IRB-approved supervision, and (iii) a mobile
+Android port using TensorFlow Lite.
+
+%====================================================================
+\section*{Acknowledgment}
+The authors thank Ms.\ Sharlene Rebeiro for her guidance throughout
+the project, and the open-source maintainers of Ultralytics YOLO,
+Deep Java Library, Spring Boot, and PostgreSQL.
+
+%====================================================================
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+\end{document}
