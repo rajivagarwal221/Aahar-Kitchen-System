@@ -12,9 +12,20 @@ type CamState = 'idle' | 'starting' | 'live' | 'denied' | 'unsupported';
 
 export default function Scan() {
   const [mode, setMode] = useState<Mode>('camera');
-  const { shots, removeShot } = useKitchen();
+  const { shots, removeShot, setItems, setDetected } = useKitchen();
   const navigate = useNavigate();
   const anyOk = shots.some((s) => s.quality.ok);
+  const [scanning, setScanning] = useState(false);
+
+  const detect = () => {
+    if (shots.length === 0 || scanning) return;
+    setScanning(true);
+    window.setTimeout(() => {
+      setItems(DEMO_ITEMS);
+      setDetected(true);
+      navigate('/pantry');
+    }, 1400);
+  };
 
   return (
     <Page>
@@ -100,13 +111,31 @@ export default function Scan() {
             )}
             <button
               className="btn-accent w-full mt-5"
-              disabled={shots.length === 0}
-              onClick={() => navigate('/detect')}
+              disabled={shots.length === 0 || scanning}
+              onClick={detect}
             >
-              <Check /> Detect ingredients {shots.length > 0 && `(${shots.length})`}
+              {scanning ? (
+                <>
+                  <motion.span
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                    className="inline-block"
+                  >
+                    <Box width={18} />
+                  </motion.span>
+                  Scanning {shots.length} photo{shots.length > 1 ? 's' : ''}…
+                </>
+              ) : (
+                <>
+                  <Check /> Detect ingredients {shots.length > 0 && `(${shots.length})`}
+                </>
+              )}
             </button>
-            {shots.length > 0 && !anyOk && (
+            {shots.length > 0 && !anyOk && !scanning && (
               <p className="mt-2 text-[0.82rem] text-chilli">Every shot is marked for retake. Detection will be less reliable.</p>
+            )}
+            {scanning && (
+              <p className="mt-2 text-[0.82rem] text-muted">Ingredients will land in your pantry.</p>
             )}
           </section>
 
@@ -343,9 +372,7 @@ function UploadCapture() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [drag, setDrag] = useState(false);
   const [busy, setBusy] = useState(0);
-  const [scanning, setScanning] = useState(0);
-  const { addShot, setItems, setDetected } = useKitchen();
-  const navigate = useNavigate();
+  const { addShot } = useKitchen();
 
   const handle = async (files: FileList | null) => {
     if (!files) return;
@@ -361,12 +388,6 @@ function UploadCapture() {
         setBusy((b) => b - 1);
       }
     }
-    setScanning(list.length);
-    window.setTimeout(() => {
-      setItems(DEMO_ITEMS);
-      setDetected(true);
-      navigate('/pantry');
-    }, 1400);
   };
 
   const onDrop = (e: DragEvent) => {
@@ -380,46 +401,32 @@ function UploadCapture() {
       onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
       onDragLeave={() => setDrag(false)}
       onDrop={onDrop}
-      className={`relative aspect-[4/3] rounded-2xl border-2 border-dashed grid place-items-center text-center p-6 transition-colors duration-300 ${scanning ? 'border-turmeric bg-turmeric/5' : drag ? 'border-leaf bg-leaf/5' : 'border-ink/20 bg-surface/50'}`}
+      className={`relative aspect-[4/3] rounded-2xl border-2 border-dashed grid place-items-center text-center p-6 transition-colors duration-300 ${drag ? 'border-leaf bg-leaf/5' : 'border-ink/20 bg-surface/50'}`}
     >
-      {scanning ? (
-        <div>
-          <motion.span
-            animate={{ scale: [1, 1.08, 1] }}
-            transition={{ duration: 1.1, repeat: Infinity, ease }}
-            className="mx-auto w-16 h-16 rounded-2xl bg-turmeric text-ink grid place-items-center"
-          >
-            <Box width={28} height={28} />
-          </motion.span>
-          <p className="mt-4 font-medium text-[1.05rem]">Scanning {scanning} shelf photo{scanning > 1 ? 's' : ''}…</p>
-          <p className="mt-1 text-[0.88rem] text-muted">Ingredients will be added to your pantry.</p>
-        </div>
-      ) : (
-        <div>
-          <motion.span
-            animate={drag ? { y: -6, scale: 1.08 } : { y: 0, scale: 1 }}
-            className="mx-auto w-16 h-16 rounded-2xl bg-leaf text-bg grid place-items-center"
-          >
-            <Upload width={28} height={28} />
-          </motion.span>
-          <p className="mt-4 font-medium text-[1.05rem]">{busy > 0 ? `Checking ${busy} photo${busy > 1 ? 's' : ''}…` : 'Drop shelf photos here'}</p>
-          <p className="mt-1 text-[0.88rem] text-muted">JPG or PNG, up to 6. On a phone this opens your camera roll or camera.</p>
-          <button className="btn-primary mt-5" onClick={() => inputRef.current?.click()}>
-            Choose photos
-          </button>
-          <input
-            ref={inputRef}
-            type="file"
-            accept="image/*"
-            multiple
-            className="sr-only"
-            onChange={(e: ChangeEvent<HTMLInputElement>) => {
-              handle(e.target.files);
-              e.target.value = '';
-            }}
-          />
-        </div>
-      )}
+      <div>
+        <motion.span
+          animate={drag ? { y: -6, scale: 1.08 } : { y: 0, scale: 1 }}
+          className="mx-auto w-16 h-16 rounded-2xl bg-leaf text-bg grid place-items-center"
+        >
+          <Upload width={28} height={28} />
+        </motion.span>
+        <p className="mt-4 font-medium text-[1.05rem]">{busy > 0 ? `Checking ${busy} photo${busy > 1 ? 's' : ''}…` : 'Drop shelf photos here'}</p>
+        <p className="mt-1 text-[0.88rem] text-muted">JPG or PNG, up to 6. On a phone this opens your camera roll or camera.</p>
+        <button className="btn-primary mt-5" onClick={() => inputRef.current?.click()}>
+          Choose photos
+        </button>
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          className="sr-only"
+          onChange={(e: ChangeEvent<HTMLInputElement>) => {
+            handle(e.target.files);
+            e.target.value = '';
+          }}
+        />
+      </div>
     </div>
   );
 }
