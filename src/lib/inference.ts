@@ -27,14 +27,31 @@ let sessionPromise: Promise<ort.InferenceSession> | null = null;
 function loadSession(onProgress?: (pct: number) => void): Promise<ort.InferenceSession> {
   if (sessionPromise) return sessionPromise;
   sessionPromise = (async () => {
-    // Serve wasm files from the official CDN.
+    // Pin wasm files to a version that matches the installed package exactly.
+    // Mismatches here cause cryptic "e.getValue is not a function" errors.
     ort.env.wasm.wasmPaths =
       'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/';
+    // Disable SIMD + threads for the broadest browser support; the model
+    // runs in ~3-5 s on a mid-range laptop even single-threaded, which is
+    // fine for a one-shot fridge scan.
+    ort.env.wasm.numThreads = 1;
+    ort.env.wasm.simd = false;
+    ort.env.wasm.proxy = false;
+    ort.env.logLevel = 'warning';
     const buffer = await fetchWithProgress(MODEL_URL, onProgress);
-    return ort.InferenceSession.create(buffer, {
-      executionProviders: ['wasm'],
-      graphOptimizationLevel: 'all',
-    });
+    try {
+      return await ort.InferenceSession.create(buffer, {
+        executionProviders: ['wasm'],
+        graphOptimizationLevel: 'all',
+      });
+    } catch (e) {
+      // Second attempt with lower optimisation if the first one blew up on an op.
+      console.warn('[aahar] primary ORT session failed; retrying with basic opt', e);
+      return await ort.InferenceSession.create(buffer, {
+        executionProviders: ['wasm'],
+        graphOptimizationLevel: 'basic',
+      });
+    }
   })();
   return sessionPromise;
 }
@@ -197,8 +214,14 @@ export async function detectIngredients(
   const inputName = session.inputNames[0];
   const out = await session.run({ [inputName]: tensor });
   const outputName = session.outputNames[0];
-  const raw = out[outputName].data as Float32Array;
-  const dims = out[outputName].dims as readonly number[];
+  const outTensor = out[outputName] as ort.Tensor;
+  // Some ORT versions make .data a getter that throws if the tensor was
+  // released; use getData() when available and fall back otherwise.
+  const raw: Float32Array =
+    typeof (outTensor as { getData?: () => Promise<Float32Array> }).getData === 'function'
+      ? (await (outTensor as { getData: () => Promise<Float32Array> }).getData())
+      : (outTensor.data as Float32Array);
+  const dims = outTensor.dims as readonly number[];
   return postprocess(raw, dims, scale, padX, padY, origW, origH);
 }
 
