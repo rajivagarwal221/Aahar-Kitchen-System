@@ -2,7 +2,8 @@ import { ChangeEvent, DragEvent, useCallback, useEffect, useRef, useState } from
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { NextStep, Page, PageHeader, ease } from '../components/Page';
-import { Camera, Check, Flip, Hand, Shelf, Sun, Upload, X } from '../components/Icons';
+import { Box, Camera, Check, Flip, Hand, Shelf, Sun, Upload, X } from '../components/Icons';
+import { DEMO_ITEMS } from '../lib/data';
 import { fileToDataUrl, loadImage, measure, Quality, uid } from '../lib/quality';
 import { useKitchen } from '../lib/store';
 
@@ -342,11 +343,14 @@ function UploadCapture() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [drag, setDrag] = useState(false);
   const [busy, setBusy] = useState(0);
-  const { addShot } = useKitchen();
+  const [scanning, setScanning] = useState(0);
+  const { addShot, setItems, setDetected } = useKitchen();
+  const navigate = useNavigate();
 
   const handle = async (files: FileList | null) => {
     if (!files) return;
     const list = Array.from(files).filter((f) => f.type.startsWith('image/')).slice(0, 6);
+    if (list.length === 0) return;
     setBusy(list.length);
     for (const f of list) {
       try {
@@ -357,6 +361,12 @@ function UploadCapture() {
         setBusy((b) => b - 1);
       }
     }
+    setScanning(list.length);
+    window.setTimeout(() => {
+      setItems(DEMO_ITEMS);
+      setDetected(true);
+      navigate('/pantry');
+    }, 1400);
   };
 
   const onDrop = (e: DragEvent) => {
@@ -370,32 +380,46 @@ function UploadCapture() {
       onDragOver={(e) => { e.preventDefault(); setDrag(true); }}
       onDragLeave={() => setDrag(false)}
       onDrop={onDrop}
-      className={`relative aspect-[4/3] rounded-2xl border-2 border-dashed grid place-items-center text-center p-6 transition-colors duration-300 ${drag ? 'border-leaf bg-leaf/5' : 'border-ink/20 bg-surface/50'}`}
+      className={`relative aspect-[4/3] rounded-2xl border-2 border-dashed grid place-items-center text-center p-6 transition-colors duration-300 ${scanning ? 'border-turmeric bg-turmeric/5' : drag ? 'border-leaf bg-leaf/5' : 'border-ink/20 bg-surface/50'}`}
     >
-      <div>
-        <motion.span
-          animate={drag ? { y: -6, scale: 1.08 } : { y: 0, scale: 1 }}
-          className="mx-auto w-16 h-16 rounded-2xl bg-leaf text-bg grid place-items-center"
-        >
-          <Upload width={28} height={28} />
-        </motion.span>
-        <p className="mt-4 font-medium text-[1.05rem]">{busy > 0 ? `Checking ${busy} photo${busy > 1 ? 's' : ''}…` : 'Drop shelf photos here'}</p>
-        <p className="mt-1 text-[0.88rem] text-muted">JPG or PNG, up to 6. On a phone this opens your camera roll or camera.</p>
-        <button className="btn-primary mt-5" onClick={() => inputRef.current?.click()}>
-          Choose photos
-        </button>
-        <input
-          ref={inputRef}
-          type="file"
-          accept="image/*"
-          multiple
-          className="sr-only"
-          onChange={(e: ChangeEvent<HTMLInputElement>) => {
-            handle(e.target.files);
-            e.target.value = '';
-          }}
-        />
-      </div>
+      {scanning ? (
+        <div>
+          <motion.span
+            animate={{ scale: [1, 1.08, 1] }}
+            transition={{ duration: 1.1, repeat: Infinity, ease }}
+            className="mx-auto w-16 h-16 rounded-2xl bg-turmeric text-ink grid place-items-center"
+          >
+            <Box width={28} height={28} />
+          </motion.span>
+          <p className="mt-4 font-medium text-[1.05rem]">Scanning {scanning} shelf photo{scanning > 1 ? 's' : ''}…</p>
+          <p className="mt-1 text-[0.88rem] text-muted">Ingredients will be added to your pantry.</p>
+        </div>
+      ) : (
+        <div>
+          <motion.span
+            animate={drag ? { y: -6, scale: 1.08 } : { y: 0, scale: 1 }}
+            className="mx-auto w-16 h-16 rounded-2xl bg-leaf text-bg grid place-items-center"
+          >
+            <Upload width={28} height={28} />
+          </motion.span>
+          <p className="mt-4 font-medium text-[1.05rem]">{busy > 0 ? `Checking ${busy} photo${busy > 1 ? 's' : ''}…` : 'Drop shelf photos here'}</p>
+          <p className="mt-1 text-[0.88rem] text-muted">JPG or PNG, up to 6. On a phone this opens your camera roll or camera.</p>
+          <button className="btn-primary mt-5" onClick={() => inputRef.current?.click()}>
+            Choose photos
+          </button>
+          <input
+            ref={inputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="sr-only"
+            onChange={(e: ChangeEvent<HTMLInputElement>) => {
+              handle(e.target.files);
+              e.target.value = '';
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }
