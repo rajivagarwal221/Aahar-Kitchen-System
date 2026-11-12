@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { NextStep, Page, PageHeader, ease } from '../components/Page';
 import { Box, Camera, Check, Flip, Hand, Shelf, Sun, Upload, X } from '../components/Icons';
-import { DEMO_ITEMS } from '../lib/data';
+import { detectAllShots } from '../lib/detectShots';
 import { fileToDataUrl, loadImage, measure, Quality, uid } from '../lib/quality';
 import { useKitchen } from '../lib/store';
 
@@ -16,15 +16,26 @@ export default function Scan() {
   const navigate = useNavigate();
   const anyOk = shots.some((s) => s.quality.ok);
   const [scanning, setScanning] = useState(false);
+  const [scanDone, setScanDone] = useState(0);
+  const [scanError, setScanError] = useState<string | null>(null);
 
-  const detect = () => {
+  const detect = async () => {
     if (shots.length === 0 || scanning) return;
+    setScanError(null);
+    setScanDone(0);
     setScanning(true);
-    window.setTimeout(() => {
-      setItems(DEMO_ITEMS);
+    try {
+      const items = await detectAllShots(
+        shots.map((s) => s.src),
+        (done) => setScanDone(done),
+      );
+      setItems(items);
       setDetected(true);
       navigate('/pantry');
-    }, 1400);
+    } catch (e) {
+      setScanError(e instanceof Error ? e.message : String(e));
+      setScanning(false);
+    }
   };
 
   return (
@@ -123,7 +134,7 @@ export default function Scan() {
                   >
                     <Box width={18} />
                   </motion.span>
-                  Scanning {shots.length} photo{shots.length > 1 ? 's' : ''}…
+                  Scanning {scanDone} / {shots.length}…
                 </>
               ) : (
                 <>
@@ -135,7 +146,12 @@ export default function Scan() {
               <p className="mt-2 text-[0.82rem] text-chilli">Every shot is marked for retake. Detection will be less reliable.</p>
             )}
             {scanning && (
-              <p className="mt-2 text-[0.82rem] text-muted">Ingredients will land in your pantry.</p>
+              <p className="mt-2 text-[0.82rem] text-muted">Running detection on every shot. Pantry opens when done.</p>
+            )}
+            {scanError && (
+              <p className="mt-2 text-[0.82rem] text-chilli">
+                {scanError}
+              </p>
             )}
           </section>
 
