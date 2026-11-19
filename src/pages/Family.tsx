@@ -11,6 +11,47 @@ const FOODS = [
   { key: 'sabzi', label: 'Sabzi', unit: 'g', base: 150, color: '#3F6B3A' },
 ] as const;
 
+// Per-serving-unit nutrition sourced from the Indian Food Nutrition dataset,
+// normalized to AHAAR's measurement standard:
+//   - roti  -> per piece (~40 g plain wheat chapati)
+//   - rice  -> per 100 g cooked ( = 1 bowl)
+//   - dal   -> per 100 ml ( = 1 cup, basic tadka dal)
+//   - sabzi -> per 100 g mixed vegetable sabzi ( = 1 bowl)
+// Macros only; mirrors the first six keys of the Recipe Nutrition type.
+type Macros = { calories: number; protein: number; carbs: number; fat: number; fibre: number; sodium: number };
+
+const NUTRITION_PER_UNIT: Record<(typeof FOODS)[number]['key'], Macros> = {
+  roti:  { calories: 120, protein: 3.0, carbs: 20, fat: 3.0, fibre: 2.0, sodium: 100 },
+  rice:  { calories: 130, protein: 2.7, carbs: 28, fat: 0.3, fibre: 0.4, sodium:   1 },
+  dal:   { calories:  65, protein: 4.0, carbs:  9, fat: 1.0, fibre: 3.0, sodium: 180 },
+  sabzi: { calories:  90, protein: 2.0, carbs: 10, fat: 5.0, fibre: 3.0, sodium: 300 },
+};
+
+const ZERO: Macros = { calories: 0, protein: 0, carbs: 0, fat: 0, fibre: 0, sodium: 0 };
+
+function plateNutrition(food: readonly { key: (typeof FOODS)[number]['key']; unit: string; amount: number }[]): Macros {
+  const total: Macros = { ...ZERO };
+  for (const f of food) {
+    const per = NUTRITION_PER_UNIT[f.key];
+    if (!per) continue;
+    // units: pieces for pcs, 100g chunks for g, 100ml chunks for ml.
+    const units = f.unit === 'pcs' ? f.amount : f.amount / 100;
+    (Object.keys(total) as (keyof Macros)[]).forEach((k) => { total[k] += per[k] * units; });
+  }
+  return total;
+}
+
+function addMacros(a: Macros, b: Macros): Macros {
+  return {
+    calories: a.calories + b.calories,
+    protein:  a.protein  + b.protein,
+    carbs:    a.carbs    + b.carbs,
+    fat:      a.fat      + b.fat,
+    fibre:    a.fibre    + b.fibre,
+    sodium:   a.sodium   + b.sodium,
+  };
+}
+
 const COMMON_DISEASES = [
   'Hypertension',
   'Pre-Diabetes',
@@ -46,9 +87,15 @@ export default function Family() {
               : Math.round((x.base * f) / 10) * 10;
           return { ...x, amount, f };
         });
-        return { m, food };
+        const macros = plateNutrition(food);
+        return { m, food, macros };
       }),
     [members],
+  );
+
+  const familyMacros = useMemo(
+    () => portions.reduce<Macros>((acc, p) => addMacros(acc, p.macros), { ...ZERO }),
+    [portions],
   );
 
   const update = (id: number, patch: Partial<Member>) =>
@@ -262,7 +309,7 @@ export default function Family() {
           </div>
 
           <ul className="mt-4 grid sm:grid-cols-2 gap-4">
-            {portions.map(({ m, food }) => {
+            {portions.map(({ m, food, macros }) => {
               const isSelected = m.id === cur.id;
               return (
                 <li
@@ -289,6 +336,23 @@ export default function Family() {
                       <span className="px-2 py-0.5 rounded-md bg-chilli/10 text-chilli border border-chilli/20 text-[0.72rem] font-semibold">
                         HR: {m.heartRate} bpm
                       </span>
+                    </div>
+                  </div>
+
+                  {/* Per-plate nutrition (kcal + key macros) */}
+                  <div className="mt-3 pt-3 border-t border-ink/10">
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-[0.72rem] uppercase tracking-wider font-semibold text-muted">On this plate</span>
+                      <span className="font-display text-lg tabular-nums text-ink">
+                        {Math.round(macros.calories)}
+                        <span className="text-[0.72rem] text-muted font-sans font-normal ml-1">kcal</span>
+                      </span>
+                    </div>
+                    <div className="mt-1 grid grid-cols-4 gap-1 text-[0.7rem] text-muted">
+                      <span className="tabular-nums"><strong className="text-ink">{macros.protein.toFixed(0)}g</strong> protein</span>
+                      <span className="tabular-nums"><strong className="text-ink">{macros.carbs.toFixed(0)}g</strong> carbs</span>
+                      <span className="tabular-nums"><strong className="text-ink">{macros.fat.toFixed(0)}g</strong> fat</span>
+                      <span className="tabular-nums"><strong className="text-ink">{macros.fibre.toFixed(0)}g</strong> fibre</span>
                     </div>
                   </div>
 
@@ -431,6 +495,50 @@ export default function Family() {
             );
           })}
         </ul>
+      </section>
+
+      {/* Family-wide nutrition from Indian Food Nutrition dataset */}
+      <section className="mt-6 card p-5 md:p-7">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="kicker text-leaf">Dinner nutrition — family total</p>
+            <h2 className="font-display text-xl mt-0.5">
+              Across {members.length} plate{members.length === 1 ? '' : 's'}
+            </h2>
+            <p className="text-[0.78rem] text-muted mt-1">
+              Rolled up from each person&apos;s portion using per-unit values normalized from the
+              Indian Food Nutrition dataset (100g = 1 bowl, 100ml = 1 cup, 1 piece per roti).
+            </p>
+          </div>
+          <span className="chip border-leaf/30 bg-leaf/10 text-leaf !text-[0.72rem]">Per-plate x {members.length}</span>
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          {([
+            { k: 'calories', label: 'Calories', unit: 'kcal' },
+            { k: 'protein',  label: 'Protein',  unit: 'g' },
+            { k: 'carbs',    label: 'Carbs',    unit: 'g' },
+            { k: 'fat',      label: 'Fat',      unit: 'g' },
+            { k: 'fibre',    label: 'Fibre',    unit: 'g' },
+            { k: 'sodium',   label: 'Sodium',   unit: 'mg' },
+          ] as const).map(({ k, label, unit }) => {
+            const v = familyMacros[k];
+            return (
+              <div key={k} className="rounded-xl bg-surface p-3 border border-ink/5">
+                <p className="text-[0.7rem] uppercase tracking-wider text-muted font-semibold">{label}</p>
+                <p className="font-display text-xl mt-0.5 tabular-nums">
+                  {v >= 100 ? Math.round(v) : v.toFixed(1)}
+                  <span className="text-[0.8rem] text-muted ml-1 font-sans font-normal">{unit}</span>
+                </p>
+                {members.length > 0 && (
+                  <p className="text-[0.68rem] text-muted mt-0.5 tabular-nums">
+                    ~{v >= 100 ? Math.round(v / members.length) : (v / members.length).toFixed(1)} {unit}/person
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </section>
 
       <NextStep
