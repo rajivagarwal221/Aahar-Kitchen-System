@@ -268,6 +268,120 @@ print(f"[recipes] loading {RECIPES_CSV.name}")
 RECIPES: list[dict] = load_recipes()
 print(f"[recipes] {len(RECIPES)} indexed")
 
+# -----------------------------------------------------------------------------
+# Nutrition: dish-level values from Indian_Food_Nutrition_Processed.csv.
+# Values are per serving as the CSV reports them.
+# -----------------------------------------------------------------------------
+NUTRITION_CSV = Path(os.environ.get(
+    "NUTRITION_CSV",
+    str(Path(__file__).parent.parent / "datasets/raw/nutrition/indian-food-nutrition/Indian_Food_Nutrition_Processed.csv"),
+))
+
+NUTRITION_KEYS = [
+    ("calories",  "Calories (kcal)"),
+    ("carbs",     "Carbohydrates (g)"),
+    ("protein",   "Protein (g)"),
+    ("fat",       "Fats (g)"),
+    ("sugar",     "Free Sugar (g)"),
+    ("fibre",     "Fibre (g)"),
+    ("sodium",    "Sodium (mg)"),
+    ("calcium",   "Calcium (mg)"),
+    ("iron",      "Iron (mg)"),
+    ("vitamin_c", "Vitamin C (mg)"),
+    ("folate",    "Folate (µg)"),
+]
+
+def _norm(s: str) -> str:
+    # lowercase; strip parentheses; collapse whitespace; drop 'recipe' suffix.
+    s = s.lower()
+    s = re.sub(r"\([^)]*\)", " ", s)
+    s = re.sub(r"\brecipe\b", " ", s)
+    s = re.sub(r"[^a-z0-9 ]+", " ", s)
+    # Common Hindi<->English spelling drift (keeps matching robust).
+    s = re.sub(r"rajmah", "rajma", s)
+    s = re.sub(r"bhurji", "bhurji scrambled", s)
+    return " ".join(s.split())
+
+def _norm_variants(s: str) -> list[str]:
+    """Return every text form we should index this row under — outer name AND
+    anything found inside parentheses (so "Spinach paneer (Palak paneer)" is
+    searchable as both "spinach paneer" and "palak paneer")."""
+    base = s.lower()
+    parens = re.findall(r"\(([^)]+)\)", base)
+    outer = re.sub(r"\([^)]*\)", " ", base)
+    forms = [outer] + parens
+    out: list[str] = []
+    for f in forms:
+        n = _norm(f)
+        if n and n not in out:
+            out.append(n)
+    return out
+
+def _f(v: str) -> float:
+    try:
+        return float((v or "").strip() or 0)
+    except ValueError:
+        return 0.0
+
+def load_nutrition() -> dict[str, dict]:
+    if not NUTRITION_CSV.exists():
+        print(f"[nutrition] CSV not found at {NUTRITION_CSV}; skipping.")
+        return {}
+    idx: dict[str, dict] = {}
+    with NUTRITION_CSV.open(encoding="utf-8", newline="") as fh:
+        for row in csv.DictReader(fh):
+            name = (row.get("Dish Name") or "").strip()
+            if not name:
+                continue
+            entry = {
+                "name": name,
+                **{short: _f(row.get(col, "")) for short, col in NUTRITION_KEYS},
+            }
+            for key in _norm_variants(name):
+                # Keep the first (outer) form if there's a clash — it's the more
+                # common English spelling.
+                idx.setdefault(key, entry)
+    return idx
+
+print(f"[nutrition] loading {NUTRITION_CSV.name}")
+NUTRITION_INDEX: dict[str, dict] = load_nutrition()
+print(f"[nutrition] {len(NUTRITION_INDEX)} dishes indexed")
+
+_STOP = {"a", "the", "and", "of", "for", "with", "to", "in", "on", "style",
+          "recipe", "fresh", "homemade", "mix", "masala", "curry", "sabzi"}
+
+def nutrition_for(recipe_name: str) -> dict | None:
+    """Match a recipe name to a nutrition row.
+    Order: exact → contains (prefer longer CSV key) → best token overlap.
+    For single-token overlap, require the match to be on a non-stop content word."""
+    if not NUTRITION_INDEX:
+        return None
+    key = _norm(recipe_name)
+    if not key:
+        return None
+    if key in NUTRITION_INDEX:
+        return NUTRITION_INDEX[key]
+    # Contains either way — prefer the longer CSV key (more specific).
+    hits = [k for k in NUTRITION_INDEX if k and (k in key or key in k)]
+    if hits:
+        hits.sort(key=len, reverse=True)
+        return NUTRITION_INDEX[hits[0]]
+    r_toks = set(key.split())
+    r_content = r_toks - _STOP
+    if not r_content:
+        return None
+    best_score, best_key = 0.0, None
+    for k in NUTRITION_INDEX:
+        k_toks = set(k.split())
+        overlap_content = len(r_content & (k_toks - _STOP))
+        if overlap_content == 0:
+            continue
+        # Score favours CSV entries with high overlap ratio relative to their length.
+        score = overlap_content * 2 + overlap_content / max(1, len(k_toks))
+        if score > best_score:
+            best_score, best_key = score, k
+    return NUTRITION_INDEX[best_key] if best_key else None
+
 def color_for(name: str) -> str:
     h = int(hashlib.md5(name.encode("utf-8")).hexdigest()[:6], 16) % 360
     return f"hsl({h} 55% 42%)"
@@ -387,6 +501,7 @@ def recipes_endpoint(q: RecipeQuery):
                 {"label": "Fits your diet", "value": 85 if "Veg" in tags else 60},
                 {"label": "Quick to make", "value": quick_v},
             ],
+            "nutrition": nutrition_for(r["name"]),
         })
     return out
 
@@ -408,6 +523,81 @@ def recipe_detail(rid: str):
         "tags": recipe_tags(r),
         "ingredients": r["ingredients_list"],
         "steps": parse_steps(r["instructions"]),
+        "nutrition": nutrition_for(r["name"]),
+    }
+
+
+# -----------------------------------------------------------------------------
+# Pantry nutrition: aggregate the dish-level nutrition CSV over the top
+# recipes that can be made with the pantry, weighted by match %.
+# -----------------------------------------------------------------------------
+class PantryNutritionQuery(BaseModel):
+    have: list[str] = []
+    top_n: int = 12
+
+@app.post("/nutrition/pantry")
+def pantry_nutrition(q: PantryNutritionQuery):
+    if not NUTRITION_INDEX:
+        return {"available": False, "dishes": [], "totals": {}, "top_nutrients": []}
+    if not q.have:
+        return {"available": True, "dishes": [], "totals": {}, "top_nutrients": []}
+
+    pantry_patterns = [patterns_for(h) for h in q.have]
+    scored: list[tuple[int, int, dict]] = []
+    for r in RECIPES:
+        matched = match_count(pantry_patterns, r["ingredients_text"])
+        if matched == 0:
+            continue
+        total = max(1, len(r["ingredients_list"]))
+        pct = int(round(100 * matched / total))
+        scored.append((pct, matched, r))
+    scored.sort(key=lambda t: (t[0], t[1]), reverse=True)
+
+    dishes: list[dict] = []
+    totals: dict[str, float] = {k: 0.0 for k, _ in NUTRITION_KEYS}
+    matched_count_total = 0
+    for pct, _, r in scored[: q.top_n]:
+        nut = nutrition_for(r["name"])
+        if not nut:
+            continue
+        weight = pct / 100.0  # weight each dish's contribution by its pantry match
+        dishes.append({
+            "recipe_id": r["id"],
+            "recipe_name": r["name"],
+            "match": pct,
+            "nutrition_source": nut["name"],
+            "nutrition": {k: nut[k] for k, _ in NUTRITION_KEYS},
+        })
+        for k, _ in NUTRITION_KEYS:
+            totals[k] += nut[k] * weight
+        matched_count_total += 1
+
+    # Average per matched dish so totals read as "a typical dish from your pantry".
+    if matched_count_total:
+        totals = {k: round(v / matched_count_total, 2) for k, v in totals.items()}
+
+    # Pick top 4 nutrients to surface (by a simple % of common daily needs).
+    DAILY: dict[str, float] = {
+        "calories": 2000, "protein": 50, "carbs": 275, "fat": 65,
+        "fibre": 28, "sodium": 2300, "calcium": 1000, "iron": 18,
+        "vitamin_c": 90, "folate": 400, "sugar": 50,
+    }
+    ranked = [
+        (k, (totals[k] / DAILY[k]) if DAILY.get(k) else 0, totals[k])
+        for k, _ in NUTRITION_KEYS if k != "sodium"
+    ]
+    ranked.sort(key=lambda t: t[1], reverse=True)
+    top_nutrients = [
+        {"key": k, "label": k.replace("_", " ").title(), "value": val, "daily_pct": round(pct * 100, 1)}
+        for k, pct, val in ranked[:4] if val > 0
+    ]
+
+    return {
+        "available": True,
+        "dishes_considered": matched_count_total,
+        "dishes": dishes[:6],   # trim the per-dish list to 6 for the UI
+        "totals": totals,
+        "top_nutrients": top_nutrients,
     }
 
 
