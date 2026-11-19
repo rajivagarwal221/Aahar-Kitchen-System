@@ -10,6 +10,23 @@ import { Member } from './store';
 
 export type RecipeStep = { title: string; detail: string; seconds: number };
 
+/** Per-serving nutrition, matched from Indian_Food_Nutrition_Processed.csv at
+ * build time. Attached to roughly 80% of recipes. */
+export type Nutrition = {
+  source: string;        // original dish name in the nutrition CSV
+  calories: number;      // kcal
+  carbs: number;         // g
+  protein: number;       // g
+  fat: number;           // g
+  sugar: number;         // g (free sugar)
+  fibre: number;         // g
+  sodium: number;        // mg
+  calcium: number;       // mg
+  iron: number;          // mg
+  vitamin_c: number;     // mg
+  folate: number;        // µg
+};
+
 export type Recipe = {
   id: string;
   name: string;
@@ -22,6 +39,14 @@ export type Recipe = {
   ingredients: { text: string; key?: string }[];
   steps: RecipeStep[];
   url: string;
+  nutrition?: Nutrition;
+};
+
+export const NUTRITION_UNITS: Record<keyof Omit<Nutrition, 'source'>, string> = {
+  calories: 'kcal',
+  carbs: 'g', protein: 'g', fat: 'g', sugar: 'g', fibre: 'g',
+  sodium: 'mg', calcium: 'mg', iron: 'mg', vitamin_c: 'mg',
+  folate: 'µg',
 };
 
 export const FILTERS = ['Veg', 'Low GI', 'High protein', 'Quick'] as const;
@@ -140,6 +165,43 @@ export function rankRecipes(recipes: Recipe[], pantry: Set<string>, members: Mem
   return recipes
     .map((r) => scoreRecipe(r, pantry, members))
     .sort((a, b) => b.match - a.match || a.recipe.minutes - b.recipe.minutes);
+}
+
+/** Average the nutrition of scored recipes that carry a nutrition match,
+ * weighted by their pantry-match score. Returns null when nothing is
+ * aggregatable. Values are "per typical dish from your pantry". */
+export function aggregateNutrition(
+  scored: Scored[],
+  topN = 12,
+): { avg: Nutrition; dishes: { id: string; name: string; match: number; nutrition: Nutrition }[]; count: number } | null {
+  const withNut = scored
+    .slice(0, topN)
+    .filter((s) => s.recipe.nutrition)
+    .map((s) => ({ s, nutrition: s.recipe.nutrition! }));
+  if (withNut.length === 0) return null;
+
+  const keys: (keyof Omit<Nutrition, 'source'>)[] = [
+    'calories', 'carbs', 'protein', 'fat', 'sugar', 'fibre',
+    'sodium', 'calcium', 'iron', 'vitamin_c', 'folate',
+  ];
+  const weights = withNut.map((w) => Math.max(1, w.s.match));
+  const totalWeight = weights.reduce((a, b) => a + b, 0);
+  const avg = { source: '' } as Nutrition;
+  for (const k of keys) {
+    let sum = 0;
+    for (let i = 0; i < withNut.length; i++) sum += withNut[i].nutrition[k] * weights[i];
+    avg[k] = Math.round((sum / totalWeight) * 100) / 100;
+  }
+  return {
+    avg,
+    count: withNut.length,
+    dishes: withNut.slice(0, 6).map((w) => ({
+      id: w.s.recipe.id,
+      name: w.s.recipe.name,
+      match: w.s.match,
+      nutrition: w.nutrition,
+    })),
+  };
 }
 
 let cache: Promise<Recipe[]> | null = null;

@@ -6,7 +6,7 @@ import { Check, Minus, Plus, Scale, X } from '../components/Icons';
 import { CLASS_NAMES, displayName } from '../lib/classNames';
 import { SAMPLE_ITEMS } from '../lib/data';
 import { manualItem } from '../lib/detectShots';
-import { NUTRIENTS, rankRecipes, useRecipes } from '../lib/recipes';
+import { aggregateNutrition, NUTRIENTS, NUTRITION_UNITS, rankRecipes, useRecipes } from '../lib/recipes';
 import { useKitchen } from '../lib/store';
 
 function fmt(qty: number, unit: string) {
@@ -42,11 +42,24 @@ export default function Pantry() {
     setPick('');
   };
 
+  // Rank once per change — reused for the graph and for the nutrition profile.
+  const scored = useMemo(
+    () => rankRecipes(recipes, new Set(items.map((i) => i.id)), members),
+    [recipes, items, members],
+  );
+
+  // Aggregate per-serving nutrition across the top matching dishes, weighted
+  // by how well each one fits the pantry. 80% of recipes carry a CSV match.
+  const nutriProfile = useMemo(
+    () => (items.length > 0 ? aggregateNutrition(scored, 12) : null),
+    [scored, items.length],
+  );
+
   // Graph layout: ingredients left, best-matching dishes middle, nutrients right.
   const graph = useMemo(() => {
     const shown = items.slice(0, GRAPH_ITEMS);
     const ids = new Set(shown.map((i) => i.id));
-    const dishes = rankRecipes(recipes, new Set(items.map((i) => i.id)), members)
+    const dishes = scored
       .filter((s) => s.have.some((k) => ids.has(k)))
       .slice(0, GRAPH_DISHES);
     const nutrients = Object.keys(NUTRIENTS).filter((n) => NUTRIENTS[n].some((u) => ids.has(u)));
@@ -70,7 +83,7 @@ export default function Pantry() {
       }
     }
     return { ing, dsh, nut, edges, H };
-  }, [items, recipes, members]);
+  }, [items, scored]);
 
   const linked = useMemo(() => {
     if (!hover) return null;
@@ -135,6 +148,42 @@ export default function Pantry() {
         title="How much you have, and what it can become."
         lead="Everything detected in your shots lands here. Items counted in pieces start at the number of boxes found; the rest start at a typical pack size. Nudge any amount, add what the camera missed, and see which dishes and nutrients each ingredient leads to."
       />
+
+      {nutriProfile && (
+        <section className="card p-5 md:p-6 mb-6">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <p className="kicker text-leaf">Nutrition profile</p>
+              <h2 className="font-display text-xl mt-0.5">Per typical dish your pantry can make</h2>
+              <p className="text-[0.82rem] text-muted mt-1">
+                Averaged over {nutriProfile.count} matched dish{nutriProfile.count === 1 ? '' : 'es'},
+                weighted by pantry fit. Source: Indian Food Nutrition dataset (1,005 dishes).
+              </p>
+            </div>
+            <span className="chip border-leaf/30 bg-leaf/10 text-leaf !text-[0.72rem]">Dish-level, per serving</span>
+          </div>
+          <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            {(['calories', 'protein', 'carbs', 'fat', 'fibre', 'iron'] as const).map((k) => {
+              const v = nutriProfile.avg[k] ?? 0;
+              return (
+                <div key={k} className="rounded-xl bg-surface p-3 border border-ink/5">
+                  <p className="text-[0.7rem] uppercase tracking-wider text-muted font-semibold">{k}</p>
+                  <p className="font-display text-xl mt-0.5 tabular-nums">
+                    {v.toFixed(v >= 100 ? 0 : 1)}
+                    <span className="text-[0.8rem] text-muted ml-1 font-sans font-normal">{NUTRITION_UNITS[k]}</span>
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+          {nutriProfile.dishes.length > 0 && (
+            <p className="mt-3 text-[0.78rem] text-muted">
+              Based on {nutriProfile.dishes.slice(0, 3).map((d) => d.name).join(', ')}
+              {nutriProfile.dishes.length > 3 ? `, +${nutriProfile.dishes.length - 3} more.` : '.'}
+            </p>
+          )}
+        </section>
+      )}
 
       <div className="grid lg:grid-cols-[1fr_1.6fr] gap-6 items-start">
         <section className="card p-5">

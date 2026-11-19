@@ -16,9 +16,31 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "datasets/raw/recipes/indian-food-dataset/IndianFoodDatasetCSV.csv"
+NUTRITION_SRC = ROOT / "datasets/raw/nutrition/indian-food-nutrition/Indian_Food_Nutrition_Processed.csv"
 OUT = ROOT / "public/recipes.json"
 MAX_RECIPES = 450
 MIN_CORE = 3
+
+# Per-serving nutrition columns from the Indian Food Nutrition CSV. The short
+# key is what we write into the recipe JSON.
+NUTRITION_COLS: list[tuple[str, str]] = [
+    ("calories",  "Calories (kcal)"),
+    ("carbs",     "Carbohydrates (g)"),
+    ("protein",   "Protein (g)"),
+    ("fat",       "Fats (g)"),
+    ("sugar",     "Free Sugar (g)"),
+    ("fibre",     "Fibre (g)"),
+    ("sodium",    "Sodium (mg)"),
+    ("calcium",   "Calcium (mg)"),
+    ("iron",      "Iron (mg)"),
+    ("vitamin_c", "Vitamin C (mg)"),
+    ("folate",    "Folate (µg)"),
+]
+
+# Words that aren't useful for fuzzy-matching recipe names to nutrition rows
+# (both sides over-use these).
+NUTR_STOP = {"a", "the", "and", "of", "for", "with", "to", "in", "on", "style",
+             "recipe", "fresh", "homemade", "mix", "masala", "curry", "sabzi"}
 
 # class key -> phrases that mean it in an ingredient line. Order matters:
 # the first class whose phrase matches wins, so specific entries come first.
@@ -234,8 +256,92 @@ def diet_of(raw: str) -> str:
     return "veg"
 
 
+# ---------- Nutrition lookup -------------------------------------------------
+
+def _nf(v: str) -> float:
+    try:
+        return float((v or "").strip() or 0)
+    except ValueError:
+        return 0.0
+
+
+def _nutr_norm(s: str) -> str:
+    """Lowercase, strip parens, drop 'recipe', punctuation, Hindi spelling drift."""
+    s = s.lower()
+    s = re.sub(r"\([^)]*\)", " ", s)
+    s = re.sub(r"\brecipe\b", " ", s)
+    s = re.sub(r"[^a-z0-9 ]+", " ", s)
+    s = re.sub(r"rajmah", "rajma", s)
+    s = re.sub(r"bhurji", "bhurji scrambled", s)
+    return " ".join(s.split())
+
+
+def _nutr_variants(s: str) -> list[str]:
+    """Return the outer name AND every parenthesised alias as separate keys."""
+    base = s.lower()
+    parens = re.findall(r"\(([^)]+)\)", base)
+    outer = re.sub(r"\([^)]*\)", " ", base)
+    out: list[str] = []
+    for f in [outer] + parens:
+        n = _nutr_norm(f)
+        if n and n not in out:
+            out.append(n)
+    return out
+
+
+def load_nutrition() -> dict[str, dict]:
+    """Index Indian_Food_Nutrition_Processed.csv under every name variant."""
+    if not NUTRITION_SRC.exists():
+        print(f"[nutrition] CSV not found at {NUTRITION_SRC}; skipping.")
+        return {}
+    idx: dict[str, dict] = {}
+    with NUTRITION_SRC.open(encoding="utf-8", newline="") as fh:
+        for row in csv.DictReader(fh):
+            name = (row.get("Dish Name") or "").strip()
+            if not name:
+                continue
+            entry = {
+                "source": name,
+                **{short: round(_nf(row.get(col, "")), 2) for short, col in NUTRITION_COLS},
+            }
+            for key in _nutr_variants(name):
+                idx.setdefault(key, entry)
+    return idx
+
+
+def nutrition_for(recipe_name: str, idx: dict[str, dict]) -> dict | None:
+    """Exact -> contains -> content-token-overlap match."""
+    if not idx:
+        return None
+    key = _nutr_norm(recipe_name)
+    if not key:
+        return None
+    if key in idx:
+        return idx[key]
+    hits = [k for k in idx if k and (k in key or key in k)]
+    if hits:
+        hits.sort(key=len, reverse=True)
+        return idx[hits[0]]
+    r_tok = set(key.split())
+    r_content = r_tok - NUTR_STOP
+    if not r_content:
+        return None
+    best_score, best_key = 0.0, None
+    for k in idx:
+        k_tok = set(k.split())
+        overlap = len(r_content & (k_tok - NUTR_STOP))
+        if overlap == 0:
+            continue
+        score = overlap * 2 + overlap / max(1, len(k_tok))
+        if score > best_score:
+            best_score, best_key = score, k
+    return idx[best_key] if best_key else None
+
+
 def main() -> None:
     rows = list(csv.DictReader(SRC.open(encoding="utf-8-sig")))
+    nutr_idx = load_nutrition()
+    print(f"[nutrition] {len(nutr_idx)} name-variants indexed from {NUTRITION_SRC.name}")
     out, seen = [], set()
     for r in rows:
         name = clean_name(r["TranslatedRecipeName"])
@@ -266,7 +372,7 @@ def main() -> None:
                 continue
             unseen = sum(1 for i in ingredients if "key" not in i)
             seen.add(name.lower())
-            out.append({
+            entry = {
                 "id": re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-"),
                 "name": name,
                 "minutes": minutes,
@@ -279,7 +385,11 @@ def main() -> None:
                 "steps": steps,
                 "url": r["URL"].strip(),
                 "_rank": len(core) / (len(core) + unseen + 1),
-            })
+            }
+            nut = nutrition_for(name, nutr_idx)
+            if nut:
+                entry["nutrition"] = nut
+            out.append(entry)
 
     # Prefer recipes whose ingredients the detector can mostly see.
     out.sort(key=lambda x: (-x["_rank"], x["name"]))
@@ -291,8 +401,10 @@ def main() -> None:
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(json.dumps(out, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     used = {k for x in out for k in x["core"]}
+    with_nutr = sum(1 for x in out if "nutrition" in x)
     print(f"{len(rows)} rows -> {len(out)} recipes, {OUT.stat().st_size / 1024:.0f} KB")
     print(f"{len(used)} detector classes appear as a core ingredient")
+    print(f"{with_nutr}/{len(out)} recipes carry a nutrition match")
 
 
 if __name__ == "__main__":
