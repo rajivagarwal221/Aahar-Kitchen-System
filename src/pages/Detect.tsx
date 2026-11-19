@@ -69,6 +69,14 @@ export default function Detect() {
     navigate('/pantry');
   };
 
+  /** Lazy mode: accept every detection above the confidence threshold and
+   * jump straight to /recipes. Skips the pantry edit step entirely. */
+  const confirmLazy = () => {
+    const picks = results.filter((i) => kept[i.id]);
+    mergeItems(picks);
+    navigate('/recipes');
+  };
+
   return (
     <Page>
       <PageHeader
@@ -256,13 +264,23 @@ export default function Detect() {
             </ul>
           )}
 
-          <button
-            className="btn-primary w-full mt-auto pt-0 !mt-6"
-            disabled={phase !== 'done' || keptCount === 0}
-            onClick={confirm}
-          >
-            <Check /> Add {keptCount} to pantry
-          </button>
+          <div className="w-full mt-auto pt-0 !mt-6 flex flex-col sm:flex-row gap-2">
+            <button
+              className="btn-primary flex-1"
+              disabled={phase !== 'done' || keptCount === 0}
+              onClick={confirm}
+            >
+              <Check /> Add {keptCount} to pantry
+            </button>
+            <button
+              className="btn-ghost flex-1"
+              disabled={phase !== 'done' || keptCount === 0}
+              onClick={confirmLazy}
+              title="Skip the pantry step and jump straight to recipes"
+            >
+              Skip to recipes →
+            </button>
+          </div>
         </aside>
       </div>
 

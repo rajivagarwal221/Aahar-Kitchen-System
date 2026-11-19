@@ -18,6 +18,14 @@ export default function Scan() {
   const [scanning, setScanning] = useState(false);
   const [scanDone, setScanDone] = useState(0);
   const [scanError, setScanError] = useState<string | null>(null);
+  // Lazy mode: detect → straight to /recipes, skipping the pantry edit step.
+  // Preference is per-browser so repeat users keep their last choice.
+  const [lazy, setLazy] = useState<boolean>(() => {
+    try { return localStorage.getItem('ahaar:lazy-scan') === '1'; } catch { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('ahaar:lazy-scan', lazy ? '1' : '0'); } catch { /* quota / private mode */ }
+  }, [lazy]);
 
   const detect = async () => {
     if (shots.length === 0 || scanning) return;
@@ -31,7 +39,7 @@ export default function Scan() {
       );
       mergeItems(items);
       setDetected(true);
-      navigate('/pantry');
+      navigate(lazy ? '/recipes' : '/pantry');
     } catch (e) {
       setScanError(e instanceof Error ? e.message : String(e));
       setScanning(false);
@@ -138,10 +146,22 @@ export default function Scan() {
                 </>
               ) : (
                 <>
-                  <Check /> Detect ingredients {shots.length > 0 && `(${shots.length})`}
+                  <Check /> {lazy ? 'Scan and go to recipes' : 'Detect ingredients'} {shots.length > 0 && `(${shots.length})`}
                 </>
               )}
             </button>
+            <label className="mt-3 flex items-center gap-2 text-[0.82rem] text-muted select-none cursor-pointer">
+              <input
+                type="checkbox"
+                checked={lazy}
+                onChange={(e) => setLazy(e.target.checked)}
+                className="h-4 w-4 accent-leaf"
+                aria-label="Lazy mode: skip the pantry step and go straight to recipes"
+              />
+              <span>
+                <strong className="text-ink font-semibold">Lazy mode</strong> — after detecting, go straight to <span className="text-leaf font-medium">Recipes</span> without editing the pantry.
+              </span>
+            </label>
             {shots.length > 0 && !anyOk && !scanning && (
               <p className="mt-2 text-[0.82rem] text-chilli">Every shot is marked for retake. Detection will be less reliable.</p>
             )}
