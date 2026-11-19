@@ -1,9 +1,11 @@
 import { FormEvent, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { NextStep, Page, PageHeader, ease } from '../components/Page';
 import { Heart, Plus, Pulse, Stethoscope, X } from '../components/Icons';
 import { uid } from '../lib/quality';
-import { Reading, useKitchen } from '../lib/store';
+import { Reading, Member, useKitchen } from '../lib/store';
+import { aggregateNutrition, Nutrition, rankRecipes, useRecipes } from '../lib/recipes';
 
 // 2017 ACC/AHA adult blood-pressure categories.
 function bpCategory(sys: number, dia: number): { label: string; tone: string } {
@@ -26,7 +28,19 @@ function shortDate(iso: string) {
 const signed = (n: number) => (n > 0 ? `+${n}` : `${n}`);
 
 export default function Health() {
-  const { members, readings, addReading, removeReading } = useKitchen();
+  const { items, members, readings, addReading, removeReading } = useKitchen();
+  const { recipes } = useRecipes();
+
+  // Pantry-weighted nutrition average across the top matching recipes.
+  // Same signal that drives the Pantry "Nutrition profile" card, reused here
+  // to tie each member's condition to a real food-facing recommendation.
+  const nutriProfile = useMemo(() => {
+    if (items.length === 0 || recipes.length === 0) return null;
+    const pantry = new Set(items.map((i) => i.id));
+    const scored = rankRecipes(recipes, pantry, members);
+    return aggregateNutrition(scored, 12);
+  }, [items, recipes, members]);
+
   const [memberId, setMemberId] = useState(members[0].id);
   const [date, setDate] = useState(today);
   const [sys, setSys] = useState('');
@@ -105,6 +119,8 @@ export default function Health() {
           </div>
         ))}
       </section>
+
+      <NutritionAdvice profile={nutriProfile} members={members} pantrySize={items.length} />
 
       <div className="mt-6 grid lg:grid-cols-[1fr_1.5fr] gap-6 items-start">
         <section className="card p-5 md:p-6">
@@ -231,6 +247,135 @@ function Summary({ series }: { series: Reading[] }) {
         <p className="mt-1.5 text-muted text-[0.78rem]">{series.length} reading{series.length === 1 ? '' : 's'}</p>
       </div>
     </div>
+  );
+}
+
+/** Condition -> which nutrients to watch, with a soft target and friendly
+ * guidance. Rule-based; shown in the UI as "not medical advice". */
+type NutrientKey = keyof Omit<Nutrition, 'source'>;
+type Watch = { key: NutrientKey; label: string; unit: string; targetHigh?: number; targetLow?: number; note: string };
+
+function watchFor(disease: string): Watch[] {
+  const d = disease.toLowerCase();
+  const w: Watch[] = [];
+  if (/hyper|bp|pressur/.test(d)) {
+    w.push({ key: 'sodium', label: 'Sodium', unit: 'mg', targetHigh: 600,
+      note: 'Keep per-dish sodium low — the DASH approach aims for <1500 mg/day across all meals.' });
+  }
+  if (/diabet|sugar|pre[- ]?diabet/.test(d)) {
+    w.push({ key: 'sugar', label: 'Free sugar', unit: 'g', targetHigh: 10,
+      note: 'Free sugar spikes blood glucose fastest.' });
+    w.push({ key: 'fibre', label: 'Fibre', unit: 'g', targetLow: 4,
+      note: 'Fibre blunts the glycemic response of a dish.' });
+  }
+  if (/cholest|heart|cardio/.test(d)) {
+    w.push({ key: 'fat', label: 'Fat', unit: 'g', targetHigh: 18,
+      note: 'Trim saturated-fat sources (ghee, cream, deep-frying) when possible.' });
+    w.push({ key: 'fibre', label: 'Fibre', unit: 'g', targetLow: 4,
+      note: 'Soluble fibre helps lower LDL cholesterol over time.' });
+  }
+  if (/reflux|acid|gerd|ulcer/.test(d)) {
+    w.push({ key: 'fat', label: 'Fat', unit: 'g', targetHigh: 15,
+      note: 'High-fat meals slow gastric emptying and worsen reflux.' });
+  }
+  if (w.length === 0) {
+    // Healthy / unspecified: just show protein as a positive signal.
+    w.push({ key: 'protein', label: 'Protein', unit: 'g', targetLow: 10,
+      note: 'Aim for a steady protein intake across meals.' });
+  }
+  return w;
+}
+
+function NutritionAdvice({
+  profile,
+  members,
+  pantrySize,
+}: {
+  profile: ReturnType<typeof aggregateNutrition>;
+  members: Member[];
+  pantrySize: number;
+}) {
+  if (!profile) {
+    return (
+      <section className="card p-5 md:p-6 mt-6">
+        <p className="kicker text-leaf">Nutrition-aware advice</p>
+        <h2 className="font-display text-xl mt-0.5">What to eat for today's readings</h2>
+        <p className="mt-2 text-[0.88rem] text-muted">
+          {pantrySize === 0
+            ? <>Your pantry is empty — <Link to="/scan" className="text-leaf underline underline-offset-2">scan a shelf</Link> so AHAAR can pair each member&apos;s condition with specific nutrients to watch.</>
+            : 'Recipes are still loading. Advice appears once at least one pantry item matches a dish in the nutrition dataset.'}
+        </p>
+      </section>
+    );
+  }
+
+  const avg = profile.avg;
+
+  return (
+    <section className="card p-5 md:p-6 mt-6">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <p className="kicker text-leaf">Nutrition-aware advice</p>
+          <h2 className="font-display text-xl mt-0.5">What to watch, per member</h2>
+          <p className="text-[0.78rem] text-muted mt-1">
+            Based on the top {profile.count} dish{profile.count === 1 ? '' : 'es'} your pantry can make,
+            averaged from the Indian Food Nutrition dataset. Rule-based — not medical advice.
+          </p>
+        </div>
+        <span className="chip border-leaf/30 bg-leaf/10 text-leaf !text-[0.72rem]">
+          Per typical dish
+        </span>
+      </div>
+
+      <ul className="mt-4 grid md:grid-cols-2 gap-3">
+        {members.map((m) => {
+          const items = watchFor(m.disease);
+          return (
+            <li key={m.id} className="rounded-xl border border-ink/10 bg-surface/60 p-4">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="font-display text-lg leading-tight">{m.name || `Member ${m.id}`}</p>
+                  <p className="mt-0.5 text-[0.78rem] text-muted flex items-center gap-1">
+                    <Stethoscope width={13} className="text-leaf" />
+                    <span>{m.disease || 'Healthy'}</span>
+                  </p>
+                </div>
+                <span className="chip border-ink/10 bg-white !text-[0.68rem] text-muted tabular-nums">
+                  {Math.round(avg.calories)} kcal
+                </span>
+              </div>
+
+              <ul className="mt-3 space-y-2">
+                {items.map((w) => {
+                  const v = avg[w.key] as number;
+                  const overHigh = w.targetHigh != null && v > w.targetHigh;
+                  const underLow = w.targetLow != null && v < w.targetLow;
+                  const ok = !overHigh && !underLow;
+                  const toneBg = ok ? 'bg-leaf/10' : overHigh ? 'bg-chilli/10' : 'bg-turmeric/10';
+                  const toneText = ok ? 'text-leaf' : overHigh ? 'text-chilli' : 'text-amber-800';
+                  const verdict = ok
+                    ? 'in target'
+                    : overHigh
+                      ? `over target (${w.targetHigh} ${w.unit})`
+                      : `under target (${w.targetLow} ${w.unit})`;
+                  return (
+                    <li key={w.key} className="flex items-start gap-3">
+                      <span className={`shrink-0 w-14 text-center rounded-md px-1 py-0.5 ${toneBg} ${toneText} font-bold text-[0.78rem] tabular-nums`}>
+                        {v.toFixed(v >= 100 ? 0 : 1)}{w.unit !== 'kcal' ? w.unit : ''}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[0.82rem] font-semibold text-ink">{w.label} — <span className={`${toneText} font-normal`}>{verdict}</span></p>
+                        <p className="text-[0.75rem] text-muted leading-snug">{w.note}</p>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
 
