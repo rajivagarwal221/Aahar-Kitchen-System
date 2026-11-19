@@ -527,6 +527,32 @@ function CgmSection({
               aria-label="Upload CGM CSV for this member"
             />
           </label>
+          <button
+            className="btn-ghost"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              setMsg(null);
+              try {
+                const res = await fetch(`${import.meta.env.BASE_URL}sample-cgm.csv`);
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const text = await res.text();
+                const { points, skipped, error } = parseCgmCsv(text);
+                if (error || points.length === 0) {
+                  setMsg({ tone: 'err', text: error ?? 'The sample file could not be parsed.' });
+                } else {
+                  addGlucose(points.map((p) => ({ ...p, memberId: member.id })));
+                  setMsg({ tone: 'info', text: `Loaded ${points.length} synthetic points (7 days) for ${member.name || 'this member'}${skipped ? `, skipped ${skipped}` : ''}. Clearly labelled as demo-only.` });
+                }
+              } catch (err) {
+                setMsg({ tone: 'err', text: err instanceof Error ? err.message : 'Could not load the sample.' });
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            Try sample data
+          </button>
           {myPoints.length > 0 && (
             <button
               className="btn-ghost"
