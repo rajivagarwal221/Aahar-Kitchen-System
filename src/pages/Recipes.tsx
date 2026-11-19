@@ -5,7 +5,7 @@ import { NextStep, Page, PageHeader, ease } from '../components/Page';
 import { Bowl, Check, Plus, Timer } from '../components/Icons';
 import { displayName } from '../lib/classNames';
 import { colorFor } from '../lib/detectShots';
-import { FILTERS, rankRecipes, useRecipes } from '../lib/recipes';
+import { FILTERS, Nutrition, rankRecipes, useRecipes } from '../lib/recipes';
 import { useKitchen } from '../lib/store';
 
 const PAGE = 12;
@@ -125,6 +125,8 @@ export default function Recipes() {
                       ))}
                     </div>
 
+                    <NutritionStrip nutrition={r.nutrition} />
+
                     <p className="mt-4 text-[0.9rem]">
                       <span className="text-leaf font-medium">You have {s.have.length} of {r.core.length}</span>
                       {s.missing.length > 0 && (
@@ -181,6 +183,7 @@ export default function Recipes() {
                           <ul className="mt-4 space-y-1 text-[0.85rem]">
                             {s.notes.map((n) => <li key={n}>{n}</li>)}
                           </ul>
+                          <NutritionDetail nutrition={r.nutrition} servings={r.servings} />
                           <p className="mt-3 text-[0.78rem] text-muted">
                             Match = 60% pantry coverage + 25% family fit + 15% speed. Family fit is rule-based and is not medical advice.
                           </p>
@@ -205,6 +208,76 @@ export default function Recipes() {
 
       <NextStep to="/family" label="Family portions" hint="Split the meal for everyone at the table." />
     </Page>
+  );
+}
+
+/** Compact per-serving strip shown on every card. Silent for the ~21% of
+ * recipes whose name didn't match the Indian Food Nutrition CSV. */
+function NutritionStrip({ nutrition }: { nutrition?: Nutrition }) {
+  if (!nutrition) return null;
+  const tiles: { k: keyof Nutrition; label: string; unit: string }[] = [
+    { k: 'calories', label: 'kcal',    unit: '' },
+    { k: 'protein',  label: 'protein', unit: 'g' },
+    { k: 'carbs',    label: 'carbs',   unit: 'g' },
+    { k: 'fibre',    label: 'fibre',   unit: 'g' },
+  ];
+  return (
+    <div className="mt-4 grid grid-cols-4 gap-2" aria-label="Per-serving nutrition">
+      {tiles.map(({ k, label, unit }) => {
+        const v = nutrition[k] as number;
+        return (
+          <div key={k} className="rounded-lg bg-surface/70 border border-ink/5 px-2 py-1.5 text-center">
+            <p className="text-[0.62rem] uppercase tracking-wider text-muted font-semibold">{label}</p>
+            <p className="font-display text-[0.95rem] tabular-nums leading-tight">
+              {v.toFixed(v >= 100 ? 0 : 1)}<span className="text-[0.65rem] text-muted ml-0.5 font-sans font-normal">{unit}</span>
+            </p>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Expanded nutrition inside the "Why this?" drawer. */
+function NutritionDetail({ nutrition, servings }: { nutrition?: Nutrition; servings: number }) {
+  if (!nutrition) {
+    return (
+      <p className="mt-4 text-[0.82rem] text-muted border-t border-ink/10 pt-4">
+        No nutrition match found for this dish in the Indian Food Nutrition dataset.
+      </p>
+    );
+  }
+  const rows: { k: keyof Nutrition; label: string; unit: string }[] = [
+    { k: 'calories',  label: 'Calories',  unit: 'kcal' },
+    { k: 'protein',   label: 'Protein',   unit: 'g' },
+    { k: 'carbs',     label: 'Carbs',     unit: 'g' },
+    { k: 'fat',       label: 'Fat',       unit: 'g' },
+    { k: 'fibre',     label: 'Fibre',     unit: 'g' },
+    { k: 'sugar',     label: 'Sugar',     unit: 'g' },
+    { k: 'sodium',    label: 'Sodium',    unit: 'mg' },
+    { k: 'calcium',   label: 'Calcium',   unit: 'mg' },
+    { k: 'iron',      label: 'Iron',      unit: 'mg' },
+    { k: 'vitamin_c', label: 'Vitamin C', unit: 'mg' },
+    { k: 'folate',    label: 'Folate',    unit: 'µg' },
+  ];
+  return (
+    <div className="mt-4 border-t border-ink/10 pt-4">
+      <p className="text-[0.75rem] uppercase tracking-wider font-semibold text-muted">Per serving ({servings} serv.)</p>
+      <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1 text-[0.85rem]">
+        {rows.map(({ k, label, unit }) => {
+          const v = nutrition[k] as number;
+          return (
+            <div key={k} className="flex justify-between">
+              <span>{label}</span>
+              <span className="tabular-nums text-muted">{v.toFixed(v >= 100 ? 0 : 1)} {unit}</span>
+            </div>
+          );
+        })}
+      </div>
+      <p className="mt-2 text-[0.72rem] text-muted">
+        Source: <em>{nutrition.source}</em> · Indian Food Nutrition dataset (1,005 dishes).
+      </p>
+    </div>
   );
 }
 
