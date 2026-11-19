@@ -6,60 +6,16 @@ import { FridgeArt } from '../components/FridgeArt';
 import { Box, Camera, Check, Reset, X } from '../components/Icons';
 import { Item } from '../lib/data';
 import { useKitchen } from '../lib/store';
-import { detectIngredients, Detection } from '../lib/inference';
+import { detectIngredients } from '../lib/inference';
+import { detectionsToItems } from '../lib/detectShots';
 
 type Phase = 'ready' | 'loading-model' | 'scanning' | 'done' | 'error';
 
-// Deterministic colour per class so the same ingredient always paints the same.
-function colorFor(className: string): string {
-  let h = 0;
-  for (let i = 0; i < className.length; i++) h = (h * 31 + className.charCodeAt(i)) & 0xffffffff;
-  const hue = Math.abs(h) % 360;
-  return `hsl(${hue} 55% 42%)`;
-}
-
-const PCS: Item['unit'] = 'pcs';
-const GRAMS: Item['unit'] = 'g';
-const LITRES: Item['unit'] = 'L';
-function defaultsFor(className: string): { qty: number; unit: Item['unit']; step: number } {
-  const n = className.toLowerCase();
-  if (n.endsWith('_oil')) return { qty: 0.5, unit: LITRES, step: 0.25 };
-  if (n === 'milk' || n === 'cream') return { qty: 0.5, unit: LITRES, step: 0.25 };
-  if (n.endsWith('_flour') || n === 'sooji_rava' || n === 'salt' || n === 'sugar' || n === 'jaggery') {
-    return { qty: 500, unit: GRAMS, step: 100 };
-  }
-  if (n.endsWith('_rice') || n.endsWith('_dal') || n === 'rajma_bean' || n === 'chickpea' ||
-      n === 'kala_chana' || n === 'black_eyed_peas' || n === 'moong_whole') {
-    return { qty: 500, unit: GRAMS, step: 100 };
-  }
-  if (n.startsWith('raw_') || n === 'paneer' || n === 'butter' || n === 'ghee' || n === 'curd_yogurt') {
-    return { qty: 250, unit: GRAMS, step: 50 };
-  }
-  if (n.includes('leaves') || n === 'spinach') return { qty: 100, unit: GRAMS, step: 20 };
-  if (n === 'eggs') return { qty: 6, unit: PCS, step: 1 };
-  // produce / fruits / most everything else
-  return { qty: 1, unit: PCS, step: 1 };
-}
-
-function toItem(d: Detection): Item {
-  const d_ = defaultsFor(d.className);
-  return {
-    id: d.id,
-    name: d.label,
-    conf: Math.round(d.confidence * 100),
-    qty: d_.qty,
-    unit: d_.unit,
-    step: d_.step,
-    color: colorFor(d.className),
-    box: [d.box.x, d.box.y, d.box.w, d.box.h],
-  };
-}
-
 export default function Detect() {
-  const { shots, setItems, setDetected, detected } = useKitchen();
+  const { shots, mergeItems, setDetected } = useKitchen();
   const navigate = useNavigate();
   const [active, setActive] = useState(0);
-  const [phase, setPhase] = useState<Phase>(detected ? 'done' : 'ready');
+  const [phase, setPhase] = useState<Phase>('ready');
   const [modelProgress, setModelProgress] = useState<number>(0);
   const [results, setResults] = useState<Item[]>([]);
   const [kept, setKept] = useState<Record<string, boolean>>({});
@@ -75,6 +31,14 @@ export default function Detect() {
     return () => { abortRef.current = true; };
   }, []);
 
+  // Boxes belong to the shot they were found in; clear them when another shot is picked.
+  useEffect(() => {
+    setPhase('ready');
+    setResults([]);
+    setKept({});
+    setError(null);
+  }, [active]);
+
   const runDetection = async () => {
     if (!shot) return;
     setError(null);
@@ -88,15 +52,7 @@ export default function Detect() {
       });
       if (abortRef.current) return;
       setPhase('scanning');
-      const items = dets.map(toItem);
-      // De-duplicate repeat classes (same ingredient appearing twice) by keeping the best conf.
-      const byClass = new Map<string, Item>();
-      for (const it of items) {
-        const key = it.name;
-        const prev = byClass.get(key);
-        if (!prev || it.conf > prev.conf) byClass.set(key, it);
-      }
-      const dedup = Array.from(byClass.values()).sort((a, b) => b.conf - a.conf);
+      const dedup = detectionsToItems(dets);
       setResults(dedup);
       setKept(Object.fromEntries(dedup.map((i) => [i.id, true])));
       setDetected(true);
@@ -109,7 +65,7 @@ export default function Detect() {
   };
 
   const confirm = () => {
-    setItems(results.filter((i) => kept[i.id]));
+    mergeItems(results.filter((i) => kept[i.id]));
     navigate('/pantry');
   };
 
@@ -120,9 +76,9 @@ export default function Detect() {
         kicker="Ingredient detection"
         icon={<Box />}
         title="Every item, named and boxed."
-        lead="A YOLOv11m model fine-tuned on 107 Indian pantry classes runs in your browser. Each box carries a confidence score; switch off anything it got wrong before it reaches your pantry."
+        lead="A YOLOv11m model fine-tuned on 107 Indian pantry classes checks one shot at a time. Each box carries a confidence score; switch off anything it got wrong before it reaches your pantry."
       >
-        <span className="chip border-ink/15 bg-surface text-muted">YOLOv11m · on-device ONNX</span>
+        <span className="chip border-ink/15 bg-surface text-muted">YOLOv11m · 107 classes</span>
       </PageHeader>
 
       <div className="grid lg:grid-cols-[1.45fr_1fr] gap-6">
@@ -151,7 +107,7 @@ export default function Detect() {
                   />
                   <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 chip border-0 bg-ink text-bg !px-4 !py-2">
                     {phase === 'loading-model'
-                      ? `Loading model ${Math.round(modelProgress * 100)}%`
+                      ? `Sending shot ${Math.round(modelProgress * 100)}%`
                       : 'Looking for ingredients…'}
                   </span>
                 </motion.div>
@@ -211,7 +167,7 @@ export default function Detect() {
               {phase === 'error'
                 ? <span className="text-chilli">Detection failed: {error}</span>
                 : shot
-                  ? 'Real on-device inference via onnxruntime-web. The 77 MB model is cached after the first run.'
+                  ? 'Live inference from the AHAAR detection backend on this shot.'
                   : <>No shots yet. <Link to="/scan" className="text-leaf underline underline-offset-2">Take a photo</Link></>}
             </p>
             {phase === 'done' ? (
@@ -243,7 +199,7 @@ export default function Detect() {
                 <span className="mx-auto w-14 h-14 rounded-2xl bg-surface text-muted grid place-items-center"><Camera /></span>
                 <p className="mt-3 text-muted text-[0.92rem]">
                   {phase === 'loading-model'
-                    ? `Downloading model… ${Math.round(modelProgress * 100)}%`
+                    ? `Sending shot… ${Math.round(modelProgress * 100)}%`
                     : phase === 'scanning'
                       ? 'Reading the shelf…'
                       : phase === 'error'

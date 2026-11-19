@@ -1,38 +1,137 @@
-import { createContext, ReactNode, useContext, useMemo, useState } from 'react';
-import { DEMO_ITEMS, Item } from './data';
+import { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
+import { Item } from './data';
 import { Quality } from './quality';
 
 export type Shot = { id: string; src: string; quality: Quality; source: 'camera' | 'upload' };
 
-type Kitchen = {
+export type Member = {
+  id: number;
+  name: string;
+  disease: string;
+  bp: string;
+  heartRate: number;
+};
+
+export type Reading = {
+  id: string;
+  memberId: number;
+  date: string; // yyyy-mm-dd
+  sys: number;
+  dia: number;
+  hr: number;
+};
+
+export type ShoppingEntry = { id: string; name: string };
+
+const START_MEMBERS: Member[] = [
+  { id: 1, name: 'Papa', disease: 'Hypertension', bp: '124/80', heartRate: 72 },
+  { id: 2, name: 'Mummy', disease: 'Pre-Diabetes', bp: '118/76', heartRate: 70 },
+  { id: 3, name: 'Aarav', disease: 'None (Healthy)', bp: '112/70', heartRate: 64 },
+  { id: 4, name: 'Dadi', disease: 'Joint Inflammation', bp: '128/82', heartRate: 74 },
+];
+
+type Saved = {
+  items: Item[];
+  shopping: ShoppingEntry[];
+  members: Member[];
+  readings: Reading[];
+};
+
+type Kitchen = Saved & {
   shots: Shot[];
   addShot: (s: Shot) => void;
   removeShot: (id: string) => void;
-  items: Item[];
   setItems: (items: Item[]) => void;
+  /** Add detected or hand-picked items; quantities already in the pantry are kept. */
+  mergeItems: (items: Item[]) => void;
+  removeItem: (id: string) => void;
+  addShopping: (entries: ShoppingEntry[]) => void;
+  removeShopping: (id: string) => void;
+  setMembers: (members: Member[]) => void;
+  addReading: (r: Reading) => void;
+  removeReading: (id: string) => void;
   detected: boolean;
   setDetected: (v: boolean) => void;
 };
 
+const KEY = 'ahaar:v1';
+/** Each signed-in account gets its own saved kitchen; guests share the base key. */
+const keyFor = (userId: string | null) => (userId ? `${KEY}:${userId}` : KEY);
+const EMPTY: Saved = { items: [], shopping: [], members: START_MEMBERS, readings: [] };
+
+function load(key: string): Saved {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return EMPTY;
+    const v = JSON.parse(raw) as Partial<Saved>;
+    return {
+      items: Array.isArray(v.items) ? v.items : [],
+      shopping: Array.isArray(v.shopping) ? v.shopping : [],
+      members: Array.isArray(v.members) && v.members.length > 0 ? v.members : START_MEMBERS,
+      readings: Array.isArray(v.readings) ? v.readings : [],
+    };
+  } catch {
+    return EMPTY;
+  }
+}
+
 const Ctx = createContext<Kitchen | null>(null);
 
-export function KitchenProvider({ children }: { children: ReactNode }) {
+export function KitchenProvider({ userId, children }: { userId: string | null; children: ReactNode }) {
+  const key = keyFor(userId);
+  const [saved, setSaved] = useState<Saved>(() => load(key));
   const [shots, setShots] = useState<Shot[]>([]);
-  const [items, setItems] = useState<Item[]>(DEMO_ITEMS);
   const [detected, setDetected] = useState(false);
 
-  const value = useMemo<Kitchen>(
-    () => ({
+  useEffect(() => {
+    try {
+      localStorage.setItem(key, JSON.stringify(saved));
+    } catch {
+      // Private mode or a full quota: the app still works for this visit.
+    }
+  }, [key, saved]);
+
+  const value = useMemo<Kitchen>(() => {
+    const patch = (f: (s: Saved) => Partial<Saved>) => setSaved((s) => ({ ...s, ...f(s) }));
+    return {
+      ...saved,
       shots,
       addShot: (s) => setShots((prev) => [...prev, s].slice(-6)),
       removeShot: (id) => setShots((prev) => prev.filter((s) => s.id !== id)),
-      items,
-      setItems,
+      setItems: (items) => patch(() => ({ items })),
+      mergeItems: (incoming) =>
+        patch((s) => {
+          const byId = new Map(s.items.map((i) => [i.id, i]));
+          for (const it of incoming) {
+            const prev = byId.get(it.id);
+            byId.set(it.id, prev ? { ...it, qty: prev.qty } : it);
+          }
+          const ids = new Set(incoming.map((i) => i.id));
+          return { items: Array.from(byId.values()), shopping: s.shopping.filter((e) => !ids.has(e.id)) };
+        }),
+      removeItem: (id) => patch((s) => ({ items: s.items.filter((i) => i.id !== id) })),
+      addShopping: (entries) =>
+        patch((s) => {
+          const have = new Set(s.shopping.map((e) => e.id));
+          return { shopping: [...s.shopping, ...entries.filter((e) => !have.has(e.id))] };
+        }),
+      removeShopping: (id) => patch((s) => ({ shopping: s.shopping.filter((e) => e.id !== id) })),
+      setMembers: (members) => patch(() => ({ members })),
+      addReading: (r) =>
+        patch((s) => ({
+          readings: [...s.readings, r],
+          // The newest reading becomes the member's current vitals on the Family page.
+          members: s.members.map((m) => {
+            if (m.id !== r.memberId) return m;
+            const newer = s.readings.some((x) => x.memberId === m.id && x.date > r.date);
+            return newer ? m : { ...m, bp: `${r.sys}/${r.dia}`, heartRate: r.hr };
+          }),
+        })),
+      removeReading: (id) => patch((s) => ({ readings: s.readings.filter((r) => r.id !== id) })),
       detected,
       setDetected,
-    }),
-    [shots, items, detected],
-  );
+    };
+  }, [saved, shots, detected]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

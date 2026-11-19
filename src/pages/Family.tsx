@@ -2,14 +2,7 @@ import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { NextStep, Page, PageHeader, ease } from '../components/Page';
 import { Bowl, Heart, People, Plus, Pulse, Stethoscope, X } from '../components/Icons';
-
-export type Member = {
-  id: number;
-  name: string;
-  disease: string;
-  bp: string;
-  heartRate: number;
-};
+import { Member, useKitchen } from '../lib/store';
 
 const FOODS = [
   { key: 'roti', label: 'Roti', unit: 'pcs', base: 3, color: '#D9A86C' },
@@ -38,16 +31,9 @@ function baseFactor(m: Member) {
   return f;
 }
 
-const START: Member[] = [
-  { id: 1, name: 'Papa', disease: 'Hypertension', bp: '124/80', heartRate: 72 },
-  { id: 2, name: 'Mummy', disease: 'Pre-Diabetes', bp: '118/76', heartRate: 70 },
-  { id: 3, name: 'Aarav', disease: 'None (Healthy)', bp: '112/70', heartRate: 64 },
-  { id: 4, name: 'Dadi', disease: 'Joint Inflammation', bp: '128/82', heartRate: 74 },
-];
-
 export default function Family() {
-  const [members, setMembers] = useState<Member[]>(START);
-  const [sel, setSel] = useState(1);
+  const { members, setMembers } = useKitchen();
+  const [sel, setSel] = useState(members[0].id);
 
   const portions = useMemo(
     () =>
@@ -66,7 +52,7 @@ export default function Family() {
   );
 
   const update = (id: number, patch: Partial<Member>) =>
-    setMembers((ms) => ms.map((m) => (m.id === id ? { ...m, ...patch } : m)));
+    setMembers(members.map((m) => (m.id === id ? { ...m, ...patch } : m)));
 
   const add = () => {
     if (members.length >= 6) return;
@@ -137,7 +123,7 @@ export default function Family() {
                   }`}
                 >
                   <span className="w-6 h-6 -ml-1 rounded-full bg-turmeric text-ink grid place-items-center text-[0.72rem] font-bold">
-                    {m.name[0] || 'M'}
+                    {(m.name[0] || 'M').toUpperCase()}
                   </span>
                   <span className="font-medium">{m.name}</span>
                 </button>
@@ -449,8 +435,8 @@ export default function Family() {
 
       <NextStep
         to="/health"
-        label="Family health growth"
-        hint="See how family health, BP & heart rate increased during AHAAR usage."
+        label="Family health log"
+        hint="Log BP and heart rate readings and watch the trend."
       />
     </Page>
   );
@@ -476,6 +462,7 @@ function Plate({ food }: { food: { key: string; color: string; f: number }[] }) 
             cy={spots[i][1]}
             fill={f.color}
             stroke="rgba(43,36,32,0.12)"
+            initial={{ r: 14 * itemScale }}
             animate={{ r: 14 * itemScale }}
             transition={{ type: 'spring', stiffness: 220, damping: 18 }}
           />

@@ -2,7 +2,8 @@ import { ChangeEvent, DragEvent, useCallback, useEffect, useRef, useState } from
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { NextStep, Page, PageHeader, ease } from '../components/Page';
-import { Camera, Check, Flip, Hand, Shelf, Sun, Upload, X } from '../components/Icons';
+import { Box, Camera, Check, Flip, Hand, Shelf, Sun, Upload, X } from '../components/Icons';
+import { detectAllShots } from '../lib/detectShots';
 import { fileToDataUrl, loadImage, measure, Quality, uid } from '../lib/quality';
 import { useKitchen } from '../lib/store';
 
@@ -11,9 +12,31 @@ type CamState = 'idle' | 'starting' | 'live' | 'denied' | 'unsupported';
 
 export default function Scan() {
   const [mode, setMode] = useState<Mode>('camera');
-  const { shots, removeShot } = useKitchen();
+  const { shots, removeShot, mergeItems, setDetected } = useKitchen();
   const navigate = useNavigate();
   const anyOk = shots.some((s) => s.quality.ok);
+  const [scanning, setScanning] = useState(false);
+  const [scanDone, setScanDone] = useState(0);
+  const [scanError, setScanError] = useState<string | null>(null);
+
+  const detect = async () => {
+    if (shots.length === 0 || scanning) return;
+    setScanError(null);
+    setScanDone(0);
+    setScanning(true);
+    try {
+      const items = await detectAllShots(
+        shots.map((s) => s.src),
+        (done) => setScanDone(done),
+      );
+      mergeItems(items);
+      setDetected(true);
+      navigate('/pantry');
+    } catch (e) {
+      setScanError(e instanceof Error ? e.message : String(e));
+      setScanning(false);
+    }
+  };
 
   return (
     <Page>
@@ -99,13 +122,36 @@ export default function Scan() {
             )}
             <button
               className="btn-accent w-full mt-5"
-              disabled={shots.length === 0}
-              onClick={() => navigate('/detect')}
+              disabled={shots.length === 0 || scanning}
+              onClick={detect}
             >
-              <Check /> Detect ingredients {shots.length > 0 && `(${shots.length})`}
+              {scanning ? (
+                <>
+                  <motion.span
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                    className="inline-block"
+                  >
+                    <Box width={18} />
+                  </motion.span>
+                  Scanning {scanDone} / {shots.length}…
+                </>
+              ) : (
+                <>
+                  <Check /> Detect ingredients {shots.length > 0 && `(${shots.length})`}
+                </>
+              )}
             </button>
-            {shots.length > 0 && !anyOk && (
+            {shots.length > 0 && !anyOk && !scanning && (
               <p className="mt-2 text-[0.82rem] text-chilli">Every shot is marked for retake. Detection will be less reliable.</p>
+            )}
+            {scanning && (
+              <p className="mt-2 text-[0.82rem] text-muted">Running detection on every shot. Pantry opens when done.</p>
+            )}
+            {scanError && (
+              <p className="mt-2 text-[0.82rem] text-chilli">
+                {scanError}
+              </p>
             )}
           </section>
 
@@ -347,6 +393,7 @@ function UploadCapture() {
   const handle = async (files: FileList | null) => {
     if (!files) return;
     const list = Array.from(files).filter((f) => f.type.startsWith('image/')).slice(0, 6);
+    if (list.length === 0) return;
     setBusy(list.length);
     for (const f of list) {
       try {
