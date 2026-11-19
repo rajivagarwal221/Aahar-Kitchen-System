@@ -3,6 +3,7 @@
 export type Item = {
   id: string;
   name: string;
+  className?: string;   // raw YOLO class like 'toor_dal', used when matching recipes
   conf: number;
   qty: number;
   unit: 'pcs' | 'g' | 'L';

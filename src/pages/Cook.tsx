@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { NextStep, Page, PageHeader, ease } from '../components/Page';
 import { Arrow, Back, Check, Pause, Play, Reset, Timer } from '../components/Icons';
-import { RECIPES } from '../lib/data';
+import { Recipe, RECIPES } from '../lib/data';
+import { fetchRecipe } from '../lib/recipes';
 
 const PAN = ['#EFE4CF', '#E7C76A', '#D99A3E', '#B86B3A', '#5E8A45'];
 
@@ -14,7 +15,39 @@ function mmss(s: number) {
 
 export default function Cook() {
   const [params, setParams] = useSearchParams();
-  const recipe = RECIPES.find((r) => r.id === params.get('recipe')) ?? RECIPES[0];
+  const requested = params.get('recipe') ?? '';
+  const staticHit = useMemo(() => RECIPES.find((r) => r.id === requested), [requested]);
+  const [fetched, setFetched] = useState<Recipe | null>(null);
+  const [fetchErr, setFetchErr] = useState<string | null>(null);
+
+  // Fetch backend recipes (ids like 'r123') when they're not in the static set.
+  useEffect(() => {
+    if (!requested || staticHit) { setFetched(null); setFetchErr(null); return; }
+    let cancelled = false;
+    fetchRecipe(requested)
+      .then((d) => {
+        if (cancelled) return;
+        const steps = d.steps.length
+          ? d.steps.map((s) => ({ title: s.title, detail: s.detail, seconds: s.seconds }))
+          : [{ title: 'Cook', detail: 'No step-by-step instructions available for this recipe.', seconds: 60 }];
+        setFetched({
+          id: d.id,
+          name: d.name,
+          match: 0,
+          minutes: d.minutes,
+          tags: d.tags,
+          uses: [],
+          missing: [],
+          reasons: [],
+          steps,
+          color: d.color,
+        });
+      })
+      .catch((e: unknown) => { if (!cancelled) setFetchErr(e instanceof Error ? e.message : String(e)); });
+    return () => { cancelled = true; };
+  }, [requested, staticHit]);
+
+  const recipe: Recipe = staticHit ?? fetched ?? RECIPES[0];
   const [step, setStep] = useState(0);
   const [left, setLeft] = useState(recipe.steps[0].seconds);
   const [running, setRunning] = useState(false);
@@ -87,7 +120,11 @@ export default function Cook() {
             className="mt-1 block h-11 px-4 pr-10 rounded-xl border border-ink/15 bg-white font-medium focus:outline-none focus:border-leaf"
           >
             {RECIPES.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+            {!staticHit && fetched && (
+              <option key={fetched.id} value={fetched.id}>{fetched.name}</option>
+            )}
           </select>
+          {fetchErr && <span className="block mt-1 text-[0.72rem] text-chilli">Recipe backend: {fetchErr}</span>}
         </label>
       </PageHeader>
 

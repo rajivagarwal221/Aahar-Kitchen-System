@@ -1,22 +1,45 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { NextStep, Page, PageHeader, ease } from '../components/Page';
 import { Bowl, Check, Timer } from '../components/Icons';
-import { FILTERS, RECIPES } from '../lib/data';
+import { FILTERS } from '../lib/data';
 import { useKitchen } from '../lib/store';
+import { fetchRecipes, FetchedRecipe } from '../lib/recipes';
 
 export default function Recipes() {
   const { items } = useKitchen();
   const [filters, setFilters] = useState<string[]>([]);
   const [open, setOpen] = useState<string | null>(null);
-  const have = new Set(items.map((i) => i.id));
+  const [list, setList] = useState<FetchedRecipe[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const list = useMemo(
+  // Pantry signal for backend: raw class name when we have it, else a normalized label.
+  const have = useMemo(
     () =>
-      RECIPES.filter((r) => filters.every((f) => r.tags.includes(f))).sort((a, b) => b.match - a.match),
-    [filters],
+      items.map((i) => i.className ?? i.name.toLowerCase().replace(/\s+/g, '_')),
+    [items],
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    fetchRecipes(have, filters, 24)
+      .then((rs) => {
+        if (!cancelled) setList(rs);
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [have, filters]);
 
   return (
     <Page>
@@ -49,11 +72,24 @@ export default function Recipes() {
         )}
       </div>
 
+      {have.length === 0 && !loading && list.length > 0 && (
+        <p className="mt-4 text-[0.88rem] text-muted">
+          Showing quick staples. <Link to="/scan" className="text-leaf underline underline-offset-2">Scan your fridge</Link> to rank by what you actually have.
+        </p>
+      )}
+
+      {error && (
+        <p className="mt-4 text-[0.88rem] text-chilli">
+          Couldn&apos;t reach the recipe backend ({error}). Make sure the FastAPI server is running — see <code>backend/README.md</code>.
+        </p>
+      )}
+
       <motion.ul layout className="mt-6 grid md:grid-cols-2 gap-5">
         <AnimatePresence mode="popLayout">
           {list.map((r, i) => {
             const isOpen = open === r.id;
-            const usesHave = r.uses.filter((u) => have.has(u)).length;
+            const usedHave = r.uses.length;
+            const total = usedHave + r.missing.length;
             return (
               <motion.li
                 key={r.id}
@@ -61,7 +97,7 @@ export default function Recipes() {
                 initial={{ opacity: 0, y: 24 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95 }}
-                transition={{ duration: 0.5, ease, delay: i * 0.06 }}
+                transition={{ duration: 0.5, ease, delay: Math.min(i * 0.04, 0.4) }}
                 className="card overflow-hidden"
               >
                 <div className="h-2" style={{ background: r.color }} />
@@ -69,7 +105,7 @@ export default function Recipes() {
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <h3 className="font-display text-[1.6rem] leading-tight">{r.name}</h3>
-                      <p className="mt-1 flex items-center gap-1.5 text-[0.88rem] text-muted"><Timer width={16} /> {r.minutes} min</p>
+                      <p className="mt-1 flex items-center gap-1.5 text-[0.88rem] text-muted"><Timer width={16} /> {r.minutes || '—'} min</p>
                     </div>
                     <MatchRing value={r.match} />
                   </div>
@@ -80,10 +116,12 @@ export default function Recipes() {
                     ))}
                   </div>
 
-                  <p className="mt-4 text-[0.9rem]">
-                    <span className="text-leaf font-medium">You have {usesHave} of {r.uses.length + r.missing.length}</span>
-                    {r.missing.length > 0 && <span className="text-muted"> · Need {r.missing.join(', ')}</span>}
-                  </p>
+                  {total > 0 && (
+                    <p className="mt-4 text-[0.9rem]">
+                      {usedHave > 0 && <span className="text-leaf font-medium">You have {usedHave} of {total}</span>}
+                      {r.missing.length > 0 && <span className="text-muted">{usedHave > 0 ? ' · ' : ''}Need {r.missing.join(', ')}</span>}
+                    </p>
+                  )}
 
                   <div className="mt-5 flex flex-wrap gap-2">
                     <button
@@ -93,7 +131,7 @@ export default function Recipes() {
                     >
                       Why this?
                     </button>
-                    <Link to={`/cook?recipe=${r.id}`} className="chip !py-2 !px-4 bg-ink text-bg border-ink hover:bg-[#3a302a]">
+                    <Link to={`/cook?recipe=${encodeURIComponent(r.id)}`} className="chip !py-2 !px-4 bg-ink text-bg border-ink hover:bg-[#3a302a]">
                       Cook this →
                     </Link>
                   </div>
@@ -122,7 +160,7 @@ export default function Recipes() {
                             </li>
                           ))}
                         </ul>
-                        <p className="mt-3 text-[0.78rem] text-muted">Scores explained with SHAP values from the ranking model.</p>
+                        <p className="mt-3 text-[0.78rem] text-muted">Score computed from pantry overlap, diet fit, and cook time.</p>
                       </motion.div>
                     )}
                   </AnimatePresence>
@@ -133,7 +171,15 @@ export default function Recipes() {
         </AnimatePresence>
       </motion.ul>
 
-      {list.length === 0 && <p className="mt-6 text-muted">No dish matches every filter. Remove one to see suggestions.</p>}
+      {!loading && list.length === 0 && !error && (
+        <p className="mt-6 text-muted">
+          {filters.length
+            ? 'No dish matches every filter. Remove one to see suggestions.'
+            : have.length
+              ? 'Nothing in the index matches your pantry yet. Try scanning again or adding staples.'
+              : 'Loading recipes…'}
+        </p>
+      )}
 
       <NextStep to="/family" label="Family portions" hint="Split the meal for everyone at the table." />
     </Page>

@@ -46,6 +46,7 @@ function toItem(d: Detection): Item {
   return {
     id: d.id,
     name: d.label,
+    className: d.className,
     conf: Math.round(d.confidence * 100),
     qty: d_.qty,
     unit: d_.unit,
