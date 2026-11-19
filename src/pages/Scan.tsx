@@ -12,7 +12,7 @@ type CamState = 'idle' | 'starting' | 'live' | 'denied' | 'unsupported';
 
 export default function Scan() {
   const [mode, setMode] = useState<Mode>('camera');
-  const { shots, removeShot, setItems, setDetected } = useKitchen();
+  const { shots, removeShot, mergeItems, setDetected } = useKitchen();
   const navigate = useNavigate();
   const anyOk = shots.some((s) => s.quality.ok);
   const [scanning, setScanning] = useState(false);
@@ -29,7 +29,7 @@ export default function Scan() {
         shots.map((s) => s.src),
         (done) => setScanDone(done),
       );
-      setItems(items);
+      mergeItems(items);
       setDetected(true);
       navigate('/pantry');
     } catch (e) {

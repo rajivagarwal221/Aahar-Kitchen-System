@@ -2,6 +2,7 @@ import { ReactNode, useEffect, useState } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Menu, X } from './Icons';
+import { useAuth } from '../lib/auth';
 
 const LINKS = [
   { to: '/scan', label: 'Scan' },
@@ -17,6 +18,8 @@ export function Layout({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const { pathname } = useLocation();
+  const { status, user, signOut } = useAuth();
+  const who = user?.displayName || user?.email || 'Account';
 
   useEffect(() => setOpen(false), [pathname]);
   useEffect(() => {
@@ -67,6 +70,19 @@ export function Layout({ children }: { children: ReactNode }) {
           </nav>
 
           <div className="flex items-center gap-2">
+            {status === 'in' && (
+              <>
+                <span className="hidden md:block max-w-[140px] truncate text-[0.85rem] text-muted" title={who}>{who}</span>
+                <button className="btn-ghost hidden sm:inline-flex !min-h-[40px] !px-4 text-[0.88rem]" onClick={() => signOut()}>
+                  Sign out
+                </button>
+              </>
+            )}
+            {status === 'out' && (
+              <Link to="/login" className="btn-ghost hidden sm:inline-flex !min-h-[40px] !px-4 text-[0.88rem]">
+                Sign in
+              </Link>
+            )}
             <Link to="/scan" className="btn-primary hidden sm:inline-flex !min-h-[40px] !px-4 text-[0.88rem]">
               Scan fridge
             </Link>
@@ -104,6 +120,17 @@ export function Layout({ children }: { children: ReactNode }) {
                     </NavLink>
                   </motion.li>
                 ))}
+                {status === 'in' && (
+                  <li className="col-span-2 mt-1 pt-2 border-t border-ink/10 flex items-center justify-between gap-3 px-4">
+                    <span className="min-w-0 truncate text-[0.88rem] text-muted">{who}</span>
+                    <button className="py-3 text-[0.95rem] font-medium text-chilli" onClick={() => signOut()}>Sign out</button>
+                  </li>
+                )}
+                {status === 'out' && (
+                  <li className="col-span-2">
+                    <NavLink to="/login" className="block px-4 py-3 rounded-xl text-[0.95rem] font-medium text-leaf">Sign in</NavLink>
+                  </li>
+                )}
               </ul>
             </motion.nav>
           )}

@@ -34,7 +34,16 @@ export async function detectIngredients(
   const form = new FormData();
   form.append('file', blob, 'scan.jpg');
 
-  const res = await fetch(DETECT_URL, { method: 'POST', body: form });
+  let res: Response;
+  try {
+    res = await fetch(DETECT_URL, { method: 'POST', body: form });
+  } catch {
+    // fetch rejects with a bare "Failed to fetch" when nothing is listening.
+    throw new Error(
+      `Could not reach the detection backend at ${DETECT_URL}. ` +
+      'Start it with "python backend/app.py", or set VITE_DETECT_URL.',
+    );
+  }
   onProgress?.(0.9);
   if (!res.ok) {
     throw new Error(

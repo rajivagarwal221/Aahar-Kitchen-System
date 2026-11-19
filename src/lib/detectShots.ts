@@ -1,7 +1,7 @@
-// Shared helpers that turn backend Detection[] into pantry Item[] and
-// merge detections from several shots. Used by both the Detect page
-// (single shot) and the Scan page (all shots in one pass).
+// Turns backend Detection[] into pantry Item[] and merges detections from
+// several shots. Used by the Detect page (one shot) and the Scan page (all shots).
 
+import { displayName } from './classNames';
 import { Item } from './data';
 import { Detection, detectIngredients } from './inference';
 
@@ -18,7 +18,7 @@ export function defaultsFor(className: string): { qty: number; unit: Item['unit'
   if (n.endsWith('_flour') || n === 'sooji_rava' || n === 'salt' || n === 'sugar' || n === 'jaggery') {
     return { qty: 500, unit: 'g', step: 100 };
   }
-  if (n.endsWith('_rice') || n.endsWith('_dal') || n === 'rajma_bean' || n === 'chickpea' ||
+  if (n.endsWith('_rice') || n.endsWith('_dal') || n === 'chickpea' ||
       n === 'kala_chana' || n === 'black_eyed_peas' || n === 'moong_whole') {
     return { qty: 500, unit: 'g', step: 100 };
   }
@@ -30,32 +30,42 @@ export function defaultsFor(className: string): { qty: number; unit: Item['unit'
   return { qty: 1, unit: 'pcs', step: 1 };
 }
 
-export function toItem(d: Detection): Item {
-  const d_ = defaultsFor(d.className);
-  return {
-    id: d.id,
-    name: d.label,
-    conf: Math.round(d.confidence * 100),
-    qty: d_.qty,
-    unit: d_.unit,
-    step: d_.step,
-    color: colorFor(d.className),
-    box: [d.box.x, d.box.y, d.box.w, d.box.h],
-  };
+/** A pantry item for a class the user picked by hand. */
+export function manualItem(className: string): Item {
+  return { id: className, name: displayName(className), conf: 100, ...defaultsFor(className), color: colorFor(className), box: [0, 0, 0, 0] };
 }
 
-/** Collapse repeat classes across all shots: keep the highest-confidence sighting. */
+/**
+ * One item per class. The box and confidence come from the best sighting;
+ * for things counted in pieces the quantity is how many boxes were found.
+ */
 export function detectionsToItems(dets: Detection[]): Item[] {
-  const byClass = new Map<string, Item>();
+  const best = new Map<string, Detection>();
+  const count = new Map<string, number>();
   for (const d of dets) {
-    const it = toItem(d);
-    const prev = byClass.get(it.name);
-    if (!prev || it.conf > prev.conf) byClass.set(it.name, it);
+    count.set(d.className, (count.get(d.className) ?? 0) + 1);
+    const prev = best.get(d.className);
+    if (!prev || d.confidence > prev.confidence) best.set(d.className, d);
   }
-  return Array.from(byClass.values()).sort((a, b) => b.conf - a.conf);
+  return Array.from(best.values())
+    .sort((a, b) => b.confidence - a.confidence)
+    .map((d) => {
+      const base = defaultsFor(d.className);
+      const n = count.get(d.className) ?? 1;
+      return {
+        id: d.className,
+        name: d.label,
+        conf: Math.round(d.confidence * 100),
+        qty: base.unit === 'pcs' && d.className !== 'eggs' ? n : base.qty,
+        unit: base.unit,
+        step: base.step,
+        color: colorFor(d.className),
+        box: [d.box.x, d.box.y, d.box.w, d.box.h],
+      };
+    });
 }
 
-/** Run detection on every shot sequentially, with progress callback. */
+/** Run detection on every shot in turn, reporting progress after each one. */
 export async function detectAllShots(
   sources: string[],
   onProgress?: (done: number, total: number) => void,
@@ -63,8 +73,7 @@ export async function detectAllShots(
   onProgress?.(0, sources.length);
   const all: Detection[] = [];
   for (let i = 0; i < sources.length; i++) {
-    const dets = await detectIngredients(sources[i]);
-    all.push(...dets);
+    all.push(...(await detectIngredients(sources[i])));
     onProgress?.(i + 1, sources.length);
   }
   return detectionsToItems(all);
