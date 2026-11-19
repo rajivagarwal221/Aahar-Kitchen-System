@@ -21,7 +21,7 @@ const GRAPH_DISHES = 4;
 type Node = { id: string; label: string; x: number; y: number; color: string };
 
 export default function Pantry() {
-  const { items, setItems, mergeItems, removeItem, shopping, removeShopping, members } = useKitchen();
+  const { items, setItems, mergeItems, removeItem, members } = useKitchen();
   const { recipes, status } = useRecipes();
   const [hover, setHover] = useState<string | null>(null);
   const [pick, setPick] = useState('');
@@ -296,16 +296,92 @@ export default function Pantry() {
         </section>
       </div>
 
-      <section className="card p-5 mt-6">
-        <div className="flex items-center justify-between gap-3">
+      <ShoppingListSection />
+
+      <NextStep to="/recipes" label="Meal recommendations" hint="Dishes ranked for what you have tonight." />
+    </Page>
+  );
+}
+
+/** Shopping list with copy/share/export and a quick grocery-app search link. */
+function ShoppingListSection() {
+  const { shopping, mergeItems, removeShopping } = useKitchen();
+  const [copied, setCopied] = useState<'copied' | 'shared' | null>(null);
+
+  const text = useMemo(() => {
+    if (shopping.length === 0) return '';
+    const lines = shopping.map((e, i) => `${i + 1}. ${e.name}`);
+    return `AHAAR shopping list (${shopping.length} item${shopping.length === 1 ? '' : 's'}):\n${lines.join('\n')}`;
+  }, [shopping]);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied('copied');
+      window.setTimeout(() => setCopied(null), 1600);
+    } catch {
+      // Clipboard denied: fall back to a downloadable text file.
+      downloadTxt();
+    }
+  };
+
+  const share = async () => {
+    const nav = navigator as Navigator & { share?: (data: ShareData) => Promise<void> };
+    if (!nav.share) return copy();
+    try {
+      await nav.share({ title: 'AHAAR shopping list', text });
+      setCopied('shared');
+      window.setTimeout(() => setCopied(null), 1600);
+    } catch {
+      // User cancelled or share failed — not an error worth surfacing.
+    }
+  };
+
+  const downloadTxt = () => {
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ahaar-shopping-list.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const clearAll = () => shopping.forEach((e) => removeShopping(e.id));
+
+  const groceryQuery = encodeURIComponent(shopping.map((e) => e.name).join(', '));
+  const grocerySearches = shopping.length > 0 ? [
+    { label: 'BigBasket', href: `https://www.bigbasket.com/ps/?q=${groceryQuery}` },
+    { label: 'Blinkit',   href: `https://blinkit.com/s/?q=${groceryQuery}` },
+    { label: 'Zepto',     href: `https://www.zeptonow.com/search?query=${groceryQuery}` },
+  ] : [];
+
+  return (
+    <section className="card p-5 mt-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-baseline gap-3">
           <h2 className="font-display text-xl">Shopping list</h2>
           <span className="text-[0.85rem] text-muted">{shopping.length} to buy</span>
         </div>
-        {shopping.length === 0 ? (
-          <p className="mt-3 text-[0.92rem] text-muted">
-            Empty. On the <Link to="/recipes" className="text-leaf underline underline-offset-2">Recipes</Link> page, any dish that needs something you don't have can add it here.
-          </p>
-        ) : (
+        {shopping.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            <button onClick={copy} className="chip !py-1.5 !px-3 !text-[0.78rem] border-ink/15 hover:border-ink/40">
+              {copied === 'copied' ? <><Check width={13} height={13} /> Copied</> : 'Copy'}
+            </button>
+            <button onClick={share} className="chip !py-1.5 !px-3 !text-[0.78rem] border-ink/15 hover:border-ink/40">
+              {copied === 'shared' ? <><Check width={13} height={13} /> Shared</> : 'Share'}
+            </button>
+            <button onClick={downloadTxt} className="chip !py-1.5 !px-3 !text-[0.78rem] border-ink/15 hover:border-ink/40">Export .txt</button>
+            <button onClick={clearAll} className="chip !py-1.5 !px-3 !text-[0.78rem] border-chilli/40 text-chilli hover:bg-chilli/5">Clear</button>
+          </div>
+        )}
+      </div>
+      {shopping.length === 0 ? (
+        <p className="mt-3 text-[0.92rem] text-muted">
+          Empty. On the <Link to="/recipes" className="text-leaf underline underline-offset-2">Recipes</Link> page, any dish that needs something you don't have can add it here.
+        </p>
+      ) : (
+        <>
           <ul className="mt-4 grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
             {shopping.map((e) => (
               <li key={e.id} className="flex items-center gap-2 rounded-xl border border-ink/10 bg-white/60 px-3 py-2">
@@ -323,10 +399,22 @@ export default function Pantry() {
               </li>
             ))}
           </ul>
-        )}
-      </section>
-
-      <NextStep to="/recipes" label="Meal recommendations" hint="Dishes ranked for what you have tonight." />
-    </Page>
+          <div className="mt-4 flex flex-wrap items-center gap-2 text-[0.82rem] text-muted">
+            <span>Order online:</span>
+            {grocerySearches.map((g) => (
+              <a
+                key={g.label}
+                href={g.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="chip !py-1.5 !px-3 !text-[0.78rem] border-leaf/40 text-leaf hover:bg-leaf/10"
+              >
+                {g.label} ↗
+              </a>
+            ))}
+          </div>
+        </>
+      )}
+    </section>
   );
 }

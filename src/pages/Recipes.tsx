@@ -5,7 +5,42 @@ import { NextStep, Page, PageHeader, ease } from '../components/Page';
 import { Bowl, Check, Plus, Timer } from '../components/Icons';
 import { displayName } from '../lib/classNames';
 import { colorFor } from '../lib/detectShots';
-import { FILTERS, Nutrition, rankRecipes, useRecipes } from '../lib/recipes';
+import { FILTERS, Nutrition, rankRecipes, Scored, useRecipes } from '../lib/recipes';
+
+/** Nutrition chips the user can toggle. Predicates run against a recipe's
+ * per-serving nutrition from the Indian Food Nutrition dataset. Recipes
+ * without a nutrition match fail every chip (treated as "unknown"). */
+const NUTRI_FILTERS: { key: string; label: string; test: (n: Nutrition) => boolean }[] = [
+  { key: 'hi-protein', label: '≥20g protein',    test: (n) => n.protein   >= 20 },
+  { key: 'lo-cal',     label: '≤400 kcal',       test: (n) => n.calories  <= 400 },
+  { key: 'hi-fibre',   label: '≥5g fibre',       test: (n) => n.fibre     >= 5 },
+  { key: 'lo-sodium',  label: '≤300mg sodium',   test: (n) => n.sodium    <= 300 },
+  { key: 'lo-sugar',   label: '≤5g sugar',       test: (n) => n.sugar     <= 5 },
+];
+
+type SortKey = 'match' | 'kcal-asc' | 'protein-desc' | 'fibre-desc' | 'sodium-asc' | 'quickest';
+const SORTS: { key: SortKey; label: string }[] = [
+  { key: 'match',        label: 'Best match' },
+  { key: 'quickest',     label: 'Quickest' },
+  { key: 'kcal-asc',     label: 'Lowest calories' },
+  { key: 'protein-desc', label: 'Highest protein' },
+  { key: 'fibre-desc',   label: 'Highest fibre' },
+  { key: 'sodium-asc',   label: 'Lowest sodium' },
+];
+
+function sortScored(scored: Scored[], key: SortKey): Scored[] {
+  const nutOr = (s: Scored, k: keyof Nutrition, fallback: number) =>
+    (s.recipe.nutrition?.[k] as number) ?? fallback;
+  const arr = [...scored];
+  switch (key) {
+    case 'match':        return arr; // already match-sorted upstream
+    case 'quickest':     return arr.sort((a, b) => a.recipe.minutes - b.recipe.minutes || b.match - a.match);
+    case 'kcal-asc':     return arr.sort((a, b) => nutOr(a, 'calories', Infinity) - nutOr(b, 'calories', Infinity) || b.match - a.match);
+    case 'protein-desc': return arr.sort((a, b) => nutOr(b, 'protein', -1)        - nutOr(a, 'protein', -1)        || b.match - a.match);
+    case 'fibre-desc':   return arr.sort((a, b) => nutOr(b, 'fibre', -1)          - nutOr(a, 'fibre', -1)          || b.match - a.match);
+    case 'sodium-asc':   return arr.sort((a, b) => nutOr(a, 'sodium', Infinity)   - nutOr(b, 'sodium', Infinity)   || b.match - a.match);
+  }
+}
 import { useKitchen } from '../lib/store';
 
 const PAGE = 12;
@@ -14,6 +49,8 @@ export default function Recipes() {
   const { items, members, shopping, addShopping } = useKitchen();
   const { recipes, status, retry, ...rest } = useRecipes();
   const [filters, setFilters] = useState<string[]>([]);
+  const [nutriFilters, setNutriFilters] = useState<string[]>([]);
+  const [sort, setSort] = useState<SortKey>('match');
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState<string | null>(null);
   const [shown, setShown] = useState(PAGE);
@@ -22,12 +59,20 @@ export default function Recipes() {
   const ranked = useMemo(() => rankRecipes(recipes, pantry, members), [recipes, pantry, members]);
   const list = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return ranked.filter(
-      (s) => filters.every((f) => s.tags.includes(f)) && (!q || s.recipe.name.toLowerCase().includes(q)),
-    );
-  }, [ranked, filters, query]);
+    const activeNutri = NUTRI_FILTERS.filter((f) => nutriFilters.includes(f.key));
+    const filtered = ranked.filter((s) => {
+      if (!filters.every((f) => s.tags.includes(f))) return false;
+      if (q && !s.recipe.name.toLowerCase().includes(q)) return false;
+      if (activeNutri.length > 0) {
+        if (!s.recipe.nutrition) return false; // no data -> cannot assert
+        if (!activeNutri.every((f) => f.test(s.recipe.nutrition!))) return false;
+      }
+      return true;
+    });
+    return sortScored(filtered, sort);
+  }, [ranked, filters, nutriFilters, query, sort]);
 
-  useEffect(() => setShown(PAGE), [filters, query]);
+  useEffect(() => setShown(PAGE), [filters, nutriFilters, query, sort]);
 
   const listed = new Set(shopping.map((e) => e.id));
 
@@ -76,6 +121,37 @@ export default function Recipes() {
         {(filters.length > 0 || query) && (
           <button className="text-[0.85rem] text-muted underline underline-offset-2 ml-1" onClick={() => { setFilters([]); setQuery(''); }}>Clear</button>
         )}
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <span className="text-[0.85rem] text-muted mr-1">Nutrition</span>
+        {NUTRI_FILTERS.map((f) => {
+          const on = nutriFilters.includes(f.key);
+          return (
+            <motion.button
+              key={f.key}
+              whileTap={{ scale: 0.95 }}
+              aria-pressed={on}
+              onClick={() => setNutriFilters((p) => (on ? p.filter((x) => x !== f.key) : [...p, f.key]))}
+              className={`chip !py-2 !px-3 transition-colors duration-300 ${on ? 'bg-leaf text-bg border-leaf' : 'border-ink/15 hover:border-ink/40'}`}
+            >
+              {on && <Check width={14} height={14} />} {f.label}
+            </motion.button>
+          );
+        })}
+        {nutriFilters.length > 0 && (
+          <button className="text-[0.85rem] text-muted underline underline-offset-2 ml-1" onClick={() => setNutriFilters([])}>Clear</button>
+        )}
+        <label className="ml-auto flex items-center gap-2 text-[0.85rem] text-muted">
+          Sort by
+          <select
+            value={sort}
+            onChange={(e) => setSort(e.target.value as SortKey)}
+            className="h-9 px-3 pr-7 rounded-full border border-ink/15 bg-white focus:outline-none focus:border-leaf text-ink"
+          >
+            {SORTS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
+          </select>
+        </label>
       </div>
 
       {status === 'loading' && (
