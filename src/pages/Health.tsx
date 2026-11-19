@@ -1,11 +1,12 @@
-import { FormEvent, useMemo, useState } from 'react';
+import { ChangeEvent, FormEvent, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { NextStep, Page, PageHeader, ease } from '../components/Page';
-import { Heart, Plus, Pulse, Stethoscope, X } from '../components/Icons';
+import { Heart, Plus, Pulse, Reset, Stethoscope, X } from '../components/Icons';
 import { uid } from '../lib/quality';
-import { Reading, Member, useKitchen } from '../lib/store';
+import { GlucosePoint, Reading, Member, useKitchen } from '../lib/store';
 import { aggregateNutrition, Nutrition, rankRecipes, useRecipes } from '../lib/recipes';
+import { computeStats, parseCgmCsv } from '../lib/cgm';
 
 // 2017 ACC/AHA adult blood-pressure categories.
 function bpCategory(sys: number, dia: number): { label: string; tone: string } {
@@ -28,7 +29,7 @@ function shortDate(iso: string) {
 const signed = (n: number) => (n > 0 ? `+${n}` : `${n}`);
 
 export default function Health() {
-  const { items, members, readings, addReading, removeReading } = useKitchen();
+  const { items, members, readings, addReading, removeReading, glucose, addGlucose, clearGlucose } = useKitchen();
   const { recipes } = useRecipes();
 
   // Pantry-weighted nutrition average across the top matching recipes.
@@ -121,6 +122,15 @@ export default function Health() {
       </section>
 
       <NutritionAdvice profile={nutriProfile} members={members} pantrySize={items.length} />
+
+      <CgmSection
+        member={member}
+        members={members}
+        glucose={glucose}
+        addGlucose={addGlucose}
+        clearGlucose={clearGlucose}
+        setMemberId={setMemberId}
+      />
 
       <div className="mt-6 grid lg:grid-cols-[1fr_1.5fr] gap-6 items-start">
         <section className="card p-5 md:p-6">
@@ -436,5 +446,223 @@ function TrendChart({ series }: { series: Reading[] }) {
         )}
       </svg>
     </div>
+  );
+}
+
+// -----------------------------------------------------------------------------
+// CGM ingest: upload a LibreView/Dexcom CSV, parse it, store it per member,
+// and show stats + a 24h curve. Metrics follow the ADA 2020 consensus.
+// -----------------------------------------------------------------------------
+
+function CgmSection({
+  member,
+  members,
+  glucose,
+  addGlucose,
+  clearGlucose,
+  setMemberId,
+}: {
+  member: Member;
+  members: Member[];
+  glucose: GlucosePoint[];
+  addGlucose: (p: GlucosePoint[]) => void;
+  clearGlucose: (memberId: number) => void;
+  setMemberId: (id: number) => void;
+}) {
+  const [msg, setMsg] = useState<{ tone: 'ok' | 'err' | 'info'; text: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const fileRef = useRef<HTMLInputElement | null>(null);
+
+  const myPoints = useMemo(
+    () => glucose.filter((g) => g.memberId === member.id),
+    [glucose, member.id],
+  );
+  const stats = useMemo(() => computeStats(myPoints), [myPoints]);
+
+  const onFile = async (e: ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      const text = await f.text();
+      const { points, format, skipped, error } = parseCgmCsv(text);
+      if (error) {
+        setMsg({ tone: 'err', text: error });
+      } else if (points.length === 0) {
+        setMsg({ tone: 'err', text: `Parsed 0 glucose rows (skipped ${skipped}). Check the file format.` });
+      } else {
+        addGlucose(points.map((p) => ({ ...p, memberId: member.id })));
+        setMsg({ tone: 'ok', text: `Imported ${points.length} ${format === 'unknown' ? '' : format + ' '}points for ${member.name || 'this member'}${skipped ? `, skipped ${skipped}` : ''}.` });
+      }
+    } catch (err) {
+      setMsg({ tone: 'err', text: err instanceof Error ? err.message : 'Could not read the file.' });
+    } finally {
+      setBusy(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
+
+  return (
+    <section className="card p-5 md:p-6 mt-6">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <p className="kicker text-leaf">Continuous Glucose Monitor</p>
+          <h2 className="font-display text-xl mt-0.5">Upload a CGM export</h2>
+          <p className="mt-1 text-[0.82rem] text-muted max-w-[62ch]">
+            Drop in a CSV from <strong>Abbott LibreView</strong> or <strong>Dexcom Clarity</strong> for {member.name || 'this member'} and AHAAR computes the standard
+            ADA 2020 metrics — Time-in-Range, GMI (estimated A1c), coefficient of variation, and hypo/hyper events.
+            Everything stays on this device.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <label className={`btn-accent cursor-pointer ${busy ? 'pointer-events-none opacity-60' : ''}`}>
+            <Plus width={16} /> {busy ? 'Reading…' : 'Upload CGM CSV'}
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".csv,text/csv"
+              onChange={onFile}
+              className="hidden"
+              aria-label="Upload CGM CSV for this member"
+            />
+          </label>
+          {myPoints.length > 0 && (
+            <button
+              className="btn-ghost"
+              onClick={() => {
+                if (confirm(`Remove all ${myPoints.length} CGM points for ${member.name}?`)) clearGlucose(member.id);
+              }}
+            >
+              <Reset width={16} /> Clear
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Member picker (reuses the one from the reading log) */}
+      <div className="mt-4 flex flex-wrap gap-1.5">
+        {members.map((m) => {
+          const count = glucose.filter((g) => g.memberId === m.id).length;
+          return (
+            <button
+              key={m.id}
+              onClick={() => setMemberId(m.id)}
+              aria-pressed={m.id === member.id}
+              className={`chip !py-1.5 !px-3 text-[0.8rem] transition-colors ${m.id === member.id ? 'bg-ink text-bg border-ink' : 'border-ink/15 hover:border-ink/30 bg-white/70'}`}
+            >
+              {m.name || `Member ${m.id}`}
+              {count > 0 && <span className={`ml-1.5 text-[0.7rem] tabular-nums ${m.id === member.id ? 'text-turmeric' : 'text-leaf'}`}>{count}</span>}
+            </button>
+          );
+        })}
+      </div>
+
+      {msg && (
+        <p
+          role={msg.tone === 'err' ? 'alert' : undefined}
+          className={`mt-3 text-[0.85rem] ${msg.tone === 'err' ? 'text-chilli' : msg.tone === 'ok' ? 'text-leaf' : 'text-muted'}`}
+        >
+          {msg.text}
+        </p>
+      )}
+
+      {stats ? (
+        <>
+          <div className="mt-5 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+            {[
+              { k: 'meanMgdl', label: 'Mean glucose', unit: 'mg/dL', v: stats.meanMgdl, tone: 'ink' },
+              { k: 'gmiPct',   label: 'GMI (est. A1c)', unit: '%',    v: stats.gmiPct, tone: stats.gmiPct > 7 ? 'chilli' : 'leaf' },
+              { k: 'tirPct',   label: 'Time in range', unit: '%',    v: stats.tirPct, tone: stats.tirPct >= 70 ? 'leaf' : stats.tirPct >= 50 ? 'turmeric' : 'chilli' },
+              { k: 'tarPct',   label: 'Above range',   unit: '%',    v: stats.tarPct, tone: stats.tarPct > 25 ? 'chilli' : 'muted' },
+              { k: 'tbrPct',   label: 'Below range',   unit: '%',    v: stats.tbrPct, tone: stats.tbrPct > 4  ? 'chilli' : 'muted' },
+              { k: 'cvPct',    label: 'CV (variability)', unit: '%', v: stats.cvPct,  tone: stats.cvPct > 36 ? 'turmeric' : 'leaf' },
+            ].map((c) => (
+              <div key={c.k} className="rounded-xl bg-surface p-3 border border-ink/5">
+                <p className="text-[0.68rem] uppercase tracking-wider text-muted font-semibold">{c.label}</p>
+                <p className={`font-display text-xl mt-0.5 tabular-nums ${c.tone === 'chilli' ? 'text-chilli' : c.tone === 'leaf' ? 'text-leaf' : c.tone === 'turmeric' ? 'text-amber-800' : 'text-ink'}`}>
+                  {c.v}
+                  <span className="text-[0.75rem] text-muted ml-1 font-sans font-normal">{c.unit}</span>
+                </p>
+              </div>
+            ))}
+          </div>
+          <GlucoseCurve points={myPoints} />
+          <p className="mt-2 text-[0.72rem] text-muted">
+            70-180 mg/dL is the standard "in range" band for adults; targets differ for pregnancy or paediatric care.
+            {stats.hypoCount > 0 && <> · <span className="text-chilli font-medium">{stats.hypoCount} hypo event{stats.hypoCount === 1 ? '' : 's'}</span> (≥15 min below 70).</>}
+            {stats.hyperCount > 0 && <> · <span className="text-amber-800 font-medium">{stats.hyperCount} hyper event{stats.hyperCount === 1 ? '' : 's'}</span> (≥15 min above 180).</>}
+            {' '}Covers {stats.spanHours < 24 ? `${stats.spanHours.toFixed(1)} hours` : `${(stats.spanHours / 24).toFixed(1)} days`} of {stats.count} points.
+          </p>
+        </>
+      ) : (
+        <p className="mt-6 text-[0.9rem] text-muted">
+          No CGM data for {member.name || 'this member'} yet. The LibreView CSV is downloaded from{' '}
+          <a className="text-leaf underline underline-offset-2" href="https://www.libreview.com" target="_blank" rel="noreferrer">libreview.com</a>{' '}
+          under <em>Glucose History → Export</em>; Dexcom exports come from{' '}
+          <a className="text-leaf underline underline-offset-2" href="https://clarity.dexcom.com" target="_blank" rel="noreferrer">Dexcom Clarity</a>.
+        </p>
+      )}
+    </section>
+  );
+}
+
+/** Minimal glucose curve: one dot per point, 70-180 mg/dL "in range" band
+ * shaded behind. Auto-fits time axis. */
+function GlucoseCurve({ points }: { points: { ts: string; mgdl: number }[] }) {
+  if (points.length < 2) return null;
+  const W = 780;
+  const H = 240;
+  const pad = { l: 36, r: 12, t: 12, b: 24 };
+  const t0 = Date.parse(points[0].ts);
+  const t1 = Date.parse(points[points.length - 1].ts);
+  const span = Math.max(1, t1 - t0);
+  const lo = Math.min(50, Math.floor(Math.min(...points.map((p) => p.mgdl)) / 20) * 20);
+  const hi = Math.max(300, Math.ceil(Math.max(...points.map((p) => p.mgdl)) / 20) * 20);
+  const x = (ts: string) => pad.l + ((Date.parse(ts) - t0) / span) * (W - pad.l - pad.r);
+  const y = (v: number) => pad.t + (1 - (v - lo) / (hi - lo)) * (H - pad.t - pad.b);
+  const d = points.map((p, i) => `${i ? 'L' : 'M'}${x(p.ts).toFixed(1)} ${y(p.mgdl).toFixed(1)}`).join(' ');
+  const yTicks = [lo, 70, 140, 180, hi].filter((v, i, a) => a.indexOf(v) === i).sort((a, b) => a - b);
+  const totalHours = span / 3_600_000;
+  const xTicks: { ts: number; label: string }[] = [];
+  const step = totalHours <= 48 ? 6 : totalHours <= 168 ? 24 : 48; // 6h / 1d / 2d
+  for (let t = Math.ceil(t0 / (step * 3_600_000)) * step * 3_600_000; t <= t1; t += step * 3_600_000) {
+    const d2 = new Date(t);
+    xTicks.push({
+      ts: t,
+      label: totalHours <= 48
+        ? `${String(d2.getHours()).padStart(2, '0')}:${String(d2.getMinutes()).padStart(2, '0')}`
+        : d2.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
+    });
+  }
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto mt-4" role="img" aria-label={`Glucose curve over ${totalHours.toFixed(0)} hours`}>
+      {/* 70-180 in-range band */}
+      <rect x={pad.l} y={y(180)} width={W - pad.l - pad.r} height={y(70) - y(180)} fill="#3F6B3A" opacity="0.08" />
+      {yTicks.map((v) => (
+        <g key={v}>
+          <line x1={pad.l} x2={W - pad.r} y1={y(v)} y2={y(v)} stroke="#2B2420" strokeOpacity={v === 70 || v === 180 ? 0.28 : 0.08} strokeDasharray={v === 70 || v === 180 ? '0' : '4 4'} />
+          <text x={pad.l - 6} y={y(v) + 3.5} textAnchor="end" fontSize="10" fill="#6F6152">{v}</text>
+        </g>
+      ))}
+      {xTicks.map((t, i) => {
+        const tx = pad.l + ((t.ts - t0) / span) * (W - pad.l - pad.r);
+        return (
+          <text key={i} x={tx} y={H - 6} textAnchor="middle" fontSize="10" fill="#6F6152">{t.label}</text>
+        );
+      })}
+      <motion.path
+        d={d}
+        fill="none"
+        stroke="#C8693E"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        initial={{ pathLength: 0 }}
+        animate={{ pathLength: 1 }}
+        transition={{ duration: 0.9, ease }}
+      />
+    </svg>
   );
 }

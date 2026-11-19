@@ -21,6 +21,14 @@ export type Reading = {
   hr: number;
 };
 
+/** One point from a continuous glucose monitor export (LibreView / Dexcom).
+ * ts is a full ISO-8601 instant. */
+export type GlucosePoint = {
+  memberId: number;
+  ts: string;
+  mgdl: number;
+};
+
 export type ShoppingEntry = { id: string; name: string };
 
 const START_MEMBERS: Member[] = [
@@ -35,6 +43,7 @@ type Saved = {
   shopping: ShoppingEntry[];
   members: Member[];
   readings: Reading[];
+  glucose: GlucosePoint[];
 };
 
 type Kitchen = Saved & {
@@ -50,6 +59,8 @@ type Kitchen = Saved & {
   setMembers: (members: Member[]) => void;
   addReading: (r: Reading) => void;
   removeReading: (id: string) => void;
+  addGlucose: (points: GlucosePoint[]) => void;
+  clearGlucose: (memberId: number) => void;
   detected: boolean;
   setDetected: (v: boolean) => void;
 };
@@ -57,7 +68,7 @@ type Kitchen = Saved & {
 const KEY = 'ahaar:v1';
 /** Each signed-in account gets its own saved kitchen; guests share the base key. */
 const keyFor = (userId: string | null) => (userId ? `${KEY}:${userId}` : KEY);
-const EMPTY: Saved = { items: [], shopping: [], members: START_MEMBERS, readings: [] };
+const EMPTY: Saved = { items: [], shopping: [], members: START_MEMBERS, readings: [], glucose: [] };
 
 function load(key: string): Saved {
   try {
@@ -69,6 +80,7 @@ function load(key: string): Saved {
       shopping: Array.isArray(v.shopping) ? v.shopping : [],
       members: Array.isArray(v.members) && v.members.length > 0 ? v.members : START_MEMBERS,
       readings: Array.isArray(v.readings) ? v.readings : [],
+      glucose: Array.isArray(v.glucose) ? v.glucose : [],
     };
   } catch {
     return EMPTY;
@@ -128,6 +140,15 @@ export function KitchenProvider({ userId, children }: { userId: string | null; c
           }),
         })),
       removeReading: (id) => patch((s) => ({ readings: s.readings.filter((r) => r.id !== id) })),
+      addGlucose: (points) =>
+        patch((s) => {
+          // Deduplicate by (memberId, ts) so re-importing the same export is safe.
+          const seen = new Set(s.glucose.map((g) => `${g.memberId}@${g.ts}`));
+          const incoming = points.filter((p) => !seen.has(`${p.memberId}@${p.ts}`));
+          return { glucose: [...s.glucose, ...incoming].sort((a, b) => a.ts.localeCompare(b.ts)) };
+        }),
+      clearGlucose: (memberId) =>
+        patch((s) => ({ glucose: s.glucose.filter((g) => g.memberId !== memberId) })),
       detected,
       setDetected,
     };
