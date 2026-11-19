@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { NextStep, Page, PageHeader, ease } from '../components/Page';
 import { Arrow, Back, Check, Pause, Play, Reset, Timer } from '../components/Icons';
-import { Recipe, rankRecipes, useRecipes } from '../lib/recipes';
+import { Nutrition, Recipe, rankRecipes, useRecipes } from '../lib/recipes';
 import { useKitchen } from '../lib/store';
 import { VoiceCommand, canListen, canSpeak, useVoice } from '../lib/voice';
 
@@ -59,7 +59,7 @@ export default function Cook() {
 }
 
 function CookAlong({ recipe }: { recipe: Recipe }) {
-  const { items } = useKitchen();
+  const { items, members } = useKitchen();
   const pantry = useMemo(() => new Set(items.map((i) => i.id)), [items]);
   const [step, setStep] = useState(0);
   const [left, setLeft] = useState(recipe.steps[0].seconds);
@@ -170,7 +170,15 @@ function CookAlong({ recipe }: { recipe: Recipe }) {
       >
         <div className="md:text-right">
           <p className="font-display text-xl leading-tight max-w-[22ch] md:ml-auto">{recipe.name}</p>
-          <p className="mt-1 text-[0.85rem] text-muted">{recipe.minutes} min · serves {recipe.servings}</p>
+          <p className="mt-1 text-[0.85rem] text-muted">
+            {recipe.minutes} min · serves {recipe.servings}
+            {recipe.nutrition && (
+              <>
+                {' · '}
+                <span className="tabular-nums">{Math.round(recipe.nutrition.calories)} kcal/serv.</span>
+              </>
+            )}
+          </p>
           <Link to="/recipes" className="mt-2 inline-block text-[0.88rem] text-leaf font-medium underline underline-offset-2">Change dish</Link>
         </div>
       </PageHeader>
@@ -331,7 +339,114 @@ function CookAlong({ recipe }: { recipe: Recipe }) {
         <p className="mt-4 text-[0.8rem] text-muted">A green tick means the item is in your pantry.</p>
       </section>
 
+      <NutritionPanel nutrition={recipe.nutrition} servings={recipe.servings} members={members.length} />
+
       <NextStep to="/health" label="Family health log" hint="Log blood pressure and heart rate after the meal." />
     </Page>
   );
 }
+
+/** Per-serving nutrition and a "for the whole table" scale-up. */
+function NutritionPanel({
+  nutrition,
+  servings,
+  members,
+}: {
+  nutrition?: Nutrition;
+  servings: number;
+  members: number;
+}) {
+  if (!nutrition) {
+    return (
+      <section className="card p-5 md:p-6 mt-6">
+        <p className="kicker text-leaf">Nutrition</p>
+        <h2 className="font-display text-xl mt-0.5">Per serving</h2>
+        <p className="mt-2 text-[0.88rem] text-muted">
+          No match found for this dish in the Indian Food Nutrition dataset.
+        </p>
+      </section>
+    );
+  }
+
+  const scale = Math.max(1, members) / Math.max(1, servings);
+  const rows: { k: keyof Nutrition; label: string; unit: string }[] = [
+    { k: 'calories',  label: 'Calories',  unit: 'kcal' },
+    { k: 'protein',   label: 'Protein',   unit: 'g' },
+    { k: 'carbs',     label: 'Carbs',     unit: 'g' },
+    { k: 'fat',       label: 'Fat',       unit: 'g' },
+    { k: 'fibre',     label: 'Fibre',     unit: 'g' },
+    { k: 'sugar',     label: 'Sugar',     unit: 'g' },
+    { k: 'sodium',    label: 'Sodium',    unit: 'mg' },
+    { k: 'calcium',   label: 'Calcium',   unit: 'mg' },
+    { k: 'iron',      label: 'Iron',      unit: 'mg' },
+    { k: 'vitamin_c', label: 'Vitamin C', unit: 'mg' },
+    { k: 'folate',    label: 'Folate',    unit: 'µg' },
+  ];
+
+  const fmt = (v: number) => (v >= 100 ? Math.round(v).toString() : v.toFixed(1));
+
+  return (
+    <section className="card p-5 md:p-6 mt-6">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <p className="kicker text-leaf">Nutrition</p>
+          <h2 className="font-display text-xl mt-0.5">
+            Per serving
+            {members > 1 && members !== servings && (
+              <span className="text-[0.85rem] text-muted font-sans font-normal ml-2">
+                · {members} plate{members === 1 ? '' : 's'} total
+              </span>
+            )}
+          </h2>
+          <p className="text-[0.78rem] text-muted mt-1">
+            From the Indian Food Nutrition dataset. Source dish: <em>{nutrition.source}</em>.
+          </p>
+        </div>
+        <span className="chip border-leaf/30 bg-leaf/10 text-leaf !text-[0.72rem]">
+          {Math.round(nutrition.calories)} kcal / serving
+        </span>
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        {rows.slice(0, 6).map(({ k, label, unit }) => {
+          const v = nutrition[k] as number;
+          return (
+            <div key={k} className="rounded-xl bg-surface p-3 border border-ink/5">
+              <p className="text-[0.7rem] uppercase tracking-wider text-muted font-semibold">{label}</p>
+              <p className="font-display text-xl mt-0.5 tabular-nums">
+                {fmt(v)}
+                <span className="text-[0.8rem] text-muted ml-1 font-sans font-normal">{unit}</span>
+              </p>
+              {members > 1 && members !== servings && (
+                <p className="text-[0.68rem] text-muted mt-0.5 tabular-nums">
+                  {fmt(v * scale)} {unit} total
+                </p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <details className="mt-4 group">
+        <summary className="cursor-pointer text-[0.85rem] text-muted hover:text-ink select-none">
+          More micronutrients
+        </summary>
+        <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          {rows.slice(6).map(({ k, label, unit }) => {
+            const v = nutrition[k] as number;
+            return (
+              <div key={k} className="rounded-xl bg-surface p-3 border border-ink/5">
+                <p className="text-[0.7rem] uppercase tracking-wider text-muted font-semibold">{label}</p>
+                <p className="font-display text-base mt-0.5 tabular-nums">
+                  {fmt(v)}
+                  <span className="text-[0.7rem] text-muted ml-1 font-sans font-normal">{unit}</span>
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      </details>
+    </section>
+  );
+}
+
