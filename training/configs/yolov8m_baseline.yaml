@@ -12,7 +12,7 @@ patience: 15                # early-stop if val mAP hasn't improved for 15 epoch
 optimizer: auto             # ultralytics picks between SGD and AdamW
 lr0: 0.01
 seed: 42
-device: 0                   # set to 'cpu' on a laptop without CUDA
+device: auto                # 'auto' resolves to cuda:0 if available, else cpu
 project: results
 name: yolov8m_baseline      # writes results/yolov8m_baseline/weights/best.pt
 amp: true                   # mixed precision

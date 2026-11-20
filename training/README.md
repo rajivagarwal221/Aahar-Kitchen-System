@@ -15,12 +15,40 @@ and a four-cell ablation bar chart).
 
 ```bash
 # Optional: isolate from the backend deps
-python -m venv .venv && source .venv/bin/activate
+python -m venv .venv && source .venv/bin/activate         # macOS / Linux
+# .venv\Scripts\activate                                  # Windows PowerShell
 pip install -r training/requirements-ml.txt
 ```
 
 Ultralytics will auto-download the base YOLO weights
 (`yolov8m.pt`, `yolo11m.pt`, `yolo11l.pt`) on first use.
+
+### Important: install the CUDA build of PyTorch
+
+`pip install torch` from PyPI installs a CPU-only build on Windows and
+most Linux distros. Training a YOLO model on CPU is effectively
+impossible (hours per epoch instead of minutes). On a CUDA-capable
+machine, follow up the install with:
+
+```powershell
+pip uninstall -y torch torchvision
+# CUDA 12.1 (matches current NVIDIA drivers on Windows and Linux):
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+# If your driver is older, try the CUDA 11.8 build instead:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+```
+
+Then verify:
+
+```powershell
+python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'no-gpu')"
+```
+
+Expected: `True  NVIDIA GeForce RTX 3050 ...`.
+`train.py` now resolves `device: auto` (the default in every config)
+to `cuda:0` when a GPU is visible and prints a loud message with the
+exact `pip install` command above when it falls back to CPU, so you
+will know immediately if CUDA isn't wired up.
 
 ---
 

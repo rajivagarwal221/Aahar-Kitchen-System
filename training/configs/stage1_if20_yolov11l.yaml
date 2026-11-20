@@ -10,7 +10,7 @@ patience: 20
 optimizer: auto
 lr0: 0.01
 seed: 42
-device: 0
+device: auto
 project: results
 name: yolov11l_if20pretrain_stage1
 amp: true

@@ -57,6 +57,27 @@ def resolve_model(model: str) -> str:
     return str(p) if p.exists() else model
 
 
+def resolve_device(dev):
+    """'auto' (or missing) -> '0' if CUDA is available, else 'cpu'.
+    Anything else is passed through as-is (user can set 'cpu', '0,1', 'mps', ...).
+    Prints a clear message so the user knows what happened."""
+    if dev is None or str(dev).strip().lower() == "auto":
+        try:
+            import torch
+            if torch.cuda.is_available():
+                name = torch.cuda.get_device_name(0)
+                print(f"[train.py] device=auto -> cuda:0 ({name})")
+                return 0
+            print("[train.py] device=auto -> cpu (CUDA not available). "
+                  "Install the CUDA build of torch for GPU speed: "
+                  "pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121")
+            return "cpu"
+        except ImportError:
+            print("[train.py] torch not importable; letting ultralytics pick a device.")
+            return "cpu"
+    return dev
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", required=True, type=Path)
@@ -76,6 +97,7 @@ def main() -> None:
     # Everything in the YAML (minus our own run_id) is forwarded to ultralytics.
     train_kwargs = {k: v for k, v in cfg.items() if k != "run_id"}
     train_kwargs["model"] = model_arg
+    train_kwargs["device"] = resolve_device(train_kwargs.get("device"))
 
     model = YOLO(model_arg)
     results = model.train(**train_kwargs)

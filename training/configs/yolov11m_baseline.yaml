@@ -10,7 +10,7 @@ patience: 15
 optimizer: auto
 lr0: 0.01
 seed: 42
-device: 0
+device: auto
 project: results
 name: yolov11m_baseline
 amp: true
