@@ -75,6 +75,29 @@ data/
 Class list and `data.yaml` are in `datasets/ahaar-fridge.yaml`. Label
 with [Roboflow](https://roboflow.com) or [LabelImg](https://github.com/HumanSignal/labelImg).
 
+### Smoke test the pipeline first (optional, ~10 minutes)
+
+Before you invest days in shooting + labeling, verify the full
+pipeline (train → eval → plot → export) actually works on your box
+with a disposable synthetic dataset:
+
+```bash
+python datasets/scripts/make_smoke_dataset.py          # 48 + 20 fake PNGs
+python training/train.py --config training/configs/yolov8m_baseline.yaml
+python training/evaluate.py --run yolov8m_baseline
+python training/plot.py --run yolov8m_baseline
+```
+
+The model learns nothing useful (the images are flat-colour
+rectangles); the point is to catch install / path / GPU bugs in
+minutes instead of after a 3-hour real run. A tripwire file,
+`data/images/train/.AHAAR_SMOKE_MARKER`, is written so you can tell
+smoke data from real data at a glance. **Delete the smoke `.png` /
+`.txt` files before shooting AHAAR-Fridge for real** — the file set is
+small enough that `del /q data\images\train\smoke_* data\labels\train\smoke_*`
+on Windows (or `rm data/images/train/smoke_* data/labels/train/smoke_*`
+on *nix) wipes it in one command.
+
 ### IndianFood20 (the stage-1 pretraining target)
 
 Dish-level (plated) Indian food, 20 classes, from Pandey et al.,
