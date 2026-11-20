@@ -6,6 +6,7 @@ import { Bowl, Check, Plus, Timer } from '../components/Icons';
 import { displayName } from '../lib/classNames';
 import { colorFor } from '../lib/detectShots';
 import { FILTERS, Nutrition, rankRecipes, Scored, useRecipes } from '../lib/recipes';
+import { computeAllGsi, predictImpact, RecipeImpact } from '../lib/glycemic';
 
 /** Nutrition chips the user can toggle. Predicates run against a recipe's
  * per-serving nutrition from the Indian Food Nutrition dataset. Recipes
@@ -46,7 +47,19 @@ import { useKitchen } from '../lib/store';
 const PAGE = 12;
 
 export default function Recipes() {
-  const { items, members, shopping, addShopping } = useKitchen();
+  const { items, members, shopping, addShopping, meals, glucose } = useKitchen();
+
+  // Per-member glycemic sensitivity, learned from any logged meals that fell
+  // inside a CGM window. Members without data stay as GSI=null and the
+  // per-card prediction simply hides.
+  const gsiByMember = useMemo(
+    () => computeAllGsi(members.map((m) => m.id), meals, glucose),
+    [members, meals, glucose],
+  );
+  const activeMembers = useMemo(
+    () => members.filter((m) => gsiByMember.get(m.id)?.gsi != null),
+    [members, gsiByMember],
+  );
   const { recipes, status, retry, ...rest } = useRecipes();
   const [filters, setFilters] = useState<string[]>([]);
   const [nutriFilters, setNutriFilters] = useState<string[]>([]);
@@ -202,6 +215,14 @@ export default function Recipes() {
                     </div>
 
                     <NutritionStrip nutrition={r.nutrition} />
+                    <GlycemicImpactStrip
+                      nutrition={r.nutrition}
+                      members={activeMembers.map((m) => ({
+                        id: m.id,
+                        name: m.name || `Member ${m.id}`,
+                        impact: predictImpact(r.nutrition, gsiByMember.get(m.id)?.gsi ?? null),
+                      }))}
+                    />
 
                     <p className="mt-4 text-[0.9rem]">
                       <span className="text-leaf font-medium">You have {s.have.length} of {r.core.length}</span>
@@ -308,6 +329,39 @@ function NutritionStrip({ nutrition }: { nutrition?: Nutrition }) {
               {v.toFixed(v >= 100 ? 0 : 1)}<span className="text-[0.65rem] text-muted ml-0.5 font-sans font-normal">{unit}</span>
             </p>
           </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** One chip per family member whose glycemic sensitivity AHAAR has learned.
+ * Hidden entirely when no member has logged enough meals yet, so cards stay
+ * clean for first-time users. */
+function GlycemicImpactStrip({
+  nutrition,
+  members,
+}: {
+  nutrition?: Nutrition;
+  members: { id: number; name: string; impact: RecipeImpact | null }[];
+}) {
+  if (!nutrition) return null;
+  const live = members.filter((m) => m.impact !== null);
+  if (live.length === 0) return null;
+  return (
+    <div className="mt-3 flex flex-wrap gap-1.5" aria-label="Predicted glycemic impact per member">
+      {live.map((m) => {
+        const i = m.impact!;
+        return (
+          <span
+            key={m.id}
+            className="inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[0.72rem] font-medium"
+            style={{ borderColor: `${i.colour}33`, background: `${i.colour}0f`, color: i.colour }}
+            title={`Predicted 2-hour post-prandial AUC: ${i.spike.toFixed(0)} mg/dL·h`}
+          >
+            <span className="w-1.5 h-1.5 rounded-full" style={{ background: i.colour }} />
+            {m.name}: {i.label}
+          </span>
         );
       })}
     </div>

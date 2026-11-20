@@ -7,6 +7,7 @@ import { uid } from '../lib/quality';
 import { GlucosePoint, Reading, Member, useKitchen } from '../lib/store';
 import { aggregateNutrition, Nutrition, rankRecipes, useRecipes } from '../lib/recipes';
 import { computeStats, parseCgmCsv } from '../lib/cgm';
+import { computeAllGsi, GSI_POPULATION, GlycemicSummary } from '../lib/glycemic';
 
 // 2017 ACC/AHA adult blood-pressure categories.
 function bpCategory(sys: number, dia: number): { label: string; tone: string } {
@@ -29,7 +30,11 @@ function shortDate(iso: string) {
 const signed = (n: number) => (n > 0 ? `+${n}` : `${n}`);
 
 export default function Health() {
-  const { items, members, readings, addReading, removeReading, glucose, addGlucose, clearGlucose } = useKitchen();
+  const { items, members, readings, addReading, removeReading, glucose, addGlucose, clearGlucose, meals } = useKitchen();
+  const gsiByMember = useMemo(
+    () => computeAllGsi(members.map((m) => m.id), meals, glucose),
+    [members, meals, glucose],
+  );
   const { recipes } = useRecipes();
 
   // Pantry-weighted nutrition average across the top matching recipes.
@@ -131,6 +136,8 @@ export default function Health() {
         clearGlucose={clearGlucose}
         setMemberId={setMemberId}
       />
+
+      <GlycemicModelSection members={members} gsiByMember={gsiByMember} />
 
       <div className="mt-6 grid lg:grid-cols-[1fr_1.5fr] gap-6 items-start">
         <section className="card p-5 md:p-6">
@@ -690,5 +697,97 @@ function GlucoseCurve({ points }: { points: { ts: string; mgdl: number }[] }) {
         transition={{ duration: 0.9, ease }}
       />
     </svg>
+  );
+}
+
+/** Shows each family member's learned Glycemic Sensitivity Index — the
+ * output of lib/glycemic.ts. Values come from aligning logged meals
+ * with their CGM 2-hour post-prandial window. */
+function GlycemicModelSection({
+  members,
+  gsiByMember,
+}: {
+  members: Member[];
+  gsiByMember: Map<number, GlycemicSummary>;
+}) {
+  const hasAny = members.some((m) => (gsiByMember.get(m.id)?.totalMeals ?? 0) > 0);
+  return (
+    <section className="card p-5 md:p-6 mt-6">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <p className="kicker text-leaf">Personalised glycemic model</p>
+          <h2 className="font-display text-xl mt-0.5">What AHAAR has learned from logged meals</h2>
+          <p className="mt-1 text-[0.82rem] text-muted max-w-[62ch]">
+            For every meal logged on the Cook page that falls inside a member&apos;s CGM window, AHAAR
+            measures the 2-hour post-prandial AUC above baseline and divides by the dish&apos;s effective
+            carbs (carbs + ½ sugar − 0.3 fibre). The median of those ratios is their Glycemic
+            Sensitivity Index — the signal the Recipes page uses to flag high-impact dishes.
+          </p>
+        </div>
+        <span className="chip border-leaf/30 bg-leaf/10 text-leaf !text-[0.72rem]">
+          Population GSI ≈ {GSI_POPULATION.toFixed(1)} mg/dL·h/g
+        </span>
+      </div>
+
+      {!hasAny ? (
+        <p className="mt-4 text-[0.88rem] text-muted">
+          Log at least one meal on the Cook-along page for a member who has CGM data to start the model.
+        </p>
+      ) : (
+        <ul className="mt-4 grid md:grid-cols-2 gap-3">
+          {members.map((m) => {
+            const s = gsiByMember.get(m.id);
+            if (!s) return null;
+            const ratio = s.gsi == null ? null : s.gsi / GSI_POPULATION;
+            const tone = ratio == null ? 'muted' : ratio < 0.7 ? 'leaf' : ratio < 1.3 ? 'turmeric' : 'chilli';
+            return (
+              <li key={m.id} className="rounded-xl border border-ink/10 bg-surface/60 p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="font-display text-lg leading-tight">{m.name || `Member ${m.id}`}</p>
+                  {s.gsi == null ? (
+                    <span className="chip border-ink/15 !text-[0.7rem] bg-white text-muted">Needs data</span>
+                  ) : (
+                    <span
+                      className={`chip !text-[0.7rem] font-semibold ${
+                        tone === 'leaf' ? 'border-leaf/40 bg-leaf/10 text-leaf'
+                        : tone === 'turmeric' ? 'border-turmeric/40 bg-turmeric/10 text-amber-800'
+                        : 'border-chilli/40 bg-chilli/10 text-chilli'
+                      }`}
+                    >
+                      GSI {s.gsi.toFixed(2)}
+                    </span>
+                  )}
+                </div>
+                <p className="mt-1 text-[0.78rem] text-muted">
+                  {s.gsi == null
+                    ? `${s.totalMeals} meal${s.totalMeals === 1 ? '' : 's'} logged; none aligned to a CGM window yet.`
+                    : `From ${s.usedMeals} of ${s.totalMeals} logged meal${s.totalMeals === 1 ? '' : 's'}`}
+                </p>
+                {s.aucs.length > 0 && (
+                  <ul className="mt-2 space-y-1 text-[0.78rem]">
+                    {s.aucs.slice(0, 3).map((row) => (
+                      <li key={row.ts} className="flex justify-between gap-2">
+                        <span className="truncate text-ink/80">{row.recipeName}</span>
+                        <span className="tabular-nums text-muted shrink-0">
+                          iAUC {row.auc.toFixed(0)} · {row.carbs.toFixed(0)} g carb-eq
+                        </span>
+                      </li>
+                    ))}
+                    {s.aucs.length > 3 && (
+                      <li className="text-[0.72rem] text-muted">+{s.aucs.length - 3} more</li>
+                    )}
+                  </ul>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      <p className="mt-3 text-[0.72rem] text-muted">
+        Transparent and rule-based. The model becomes more reliable as more meals are logged. Not a
+        clinical device — share concerning readings with a doctor.
+      </p>
+    </section>
   );
 }
