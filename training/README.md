@@ -199,16 +199,31 @@ All plots are 180 DPI PNGs, sized to drop straight into IEEEtran
 
 The backend (`backend/app.py`) loads a YOLO checkpoint and serves
 `POST /detect`. Replace the currently-served Hugging Face checkpoint
-with your freshly-trained one:
+with your freshly-trained one in one command:
 
 ```bash
-cp results/yolov11m_if20_pretrain/weights/best.pt backend/best.pt
+python training/promote.py --run yolov11m_if20_pretrain
 ```
 
-For browser-side inference, also export to ONNX:
+This copies `results/<run>/weights/best.pt` to `backend/best.pt`,
+exports an ONNX next to it for browser-side inference, runs a
+zero-tensor smoke forward pass to confirm both load, backs up any
+previous `backend/best.pt` as `.pt.bak`, writes a promotion record
+to `backend/.promoted.json`, and flags class-count drift against
+`src/lib/classNames.ts`.
+
+Flags:
+- `--weights <path>` — promote a specific file instead of a run.
+- `--no-onnx` — skip the ONNX export (saves 10–20 s).
+- `--no-smoke-check` — skip the forward-pass verification.
+- `--allow-smoke` — force-promote weights trained on the smoke
+  dataset; off by default to prevent synthetic-rectangle models
+  from reaching production.
+
+Restart the backend to pick up the new weights:
 
 ```bash
-python -c "from ultralytics import YOLO; YOLO('results/yolov11m_if20_pretrain/weights/best.pt').export(format='onnx', opset=12, dynamic=False)"
+cd backend && python app.py
 ```
 
 ---
