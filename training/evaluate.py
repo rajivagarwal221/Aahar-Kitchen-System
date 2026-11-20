@@ -66,6 +66,20 @@ def main() -> None:
 
     run_dir = RESULTS / args.run
     weights = args.weights or (run_dir / "weights/best.pt")
+    if not weights.exists() and args.weights is None:
+        # Ultralytics auto-renames to <name>2, <name>3, ... when the target
+        # directory already exists. Find the newest sibling that actually
+        # contains best.pt and use that, so users don't have to pass
+        # --weights manually.
+        candidates = sorted(
+            [p for p in RESULTS.glob(f"{args.run}*/weights/best.pt")],
+            key=lambda p: p.stat().st_mtime,
+        )
+        if candidates:
+            weights = candidates[-1]
+            run_dir = weights.parent.parent
+            print(f"[evaluate.py] note: expected best.pt at {RESULTS / args.run}/weights/best.pt")
+            print(f"[evaluate.py] falling back to newest matching run: {weights}")
     if not weights.exists():
         raise SystemExit(f"[evaluate.py] weights not found: {weights}")
 

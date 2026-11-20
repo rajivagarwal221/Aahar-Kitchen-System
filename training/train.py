@@ -98,10 +98,25 @@ def main() -> None:
     train_kwargs = {k: v for k, v in cfg.items() if k != "run_id"}
     train_kwargs["model"] = model_arg
     train_kwargs["device"] = resolve_device(train_kwargs.get("device"))
+    # Always write to results/<name>/ (overwriting any previous attempt) so
+    # ablate.py / evaluate.py / plot.py can trust the path. Pass exist_ok
+    # via the YAML to opt out of this.
+    train_kwargs.setdefault("exist_ok", True)
 
     model = YOLO(model_arg)
     results = model.train(**train_kwargs)
-    print(f"[train.py] done. best weights: {Path(results.save_dir) / 'weights/best.pt'}")
+    actual = Path(results.save_dir) / "weights/best.pt"
+    expected = ROOT / "results" / cfg["name"] / "weights/best.pt"
+    if actual.resolve() != expected.resolve():
+        # Should not happen with exist_ok=True, but if ultralytics ever
+        # auto-renames anyway, flag it loudly instead of silently breaking
+        # the downstream evaluate.py / ablate.py contract.
+        print(f"[train.py] WARN: ultralytics wrote to {actual}")
+        print(f"[train.py] WARN: expected           {expected}")
+        print("[train.py] WARN: downstream scripts assume the expected path. "
+              "Pass --weights <actual> to evaluate.py, or rename the folder.")
+    else:
+        print(f"[train.py] done. best weights: {actual}")
 
 
 if __name__ == "__main__":
