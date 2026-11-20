@@ -12,6 +12,7 @@ const LINKS = [
   { to: '/pantry',  key: 'pantry' },
   { to: '/recipes', key: 'recipes' },
   { to: '/family',  key: 'family' },
+  { to: '/plan',    key: 'plan' },
   { to: '/cook',    key: 'cook' },
   { to: '/health',  key: 'health' },
 ] as const;

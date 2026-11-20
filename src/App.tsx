@@ -7,6 +7,7 @@ import Detect from './pages/Detect';
 import Pantry from './pages/Pantry';
 import Recipes from './pages/Recipes';
 import Family from './pages/Family';
+import Plan from './pages/Plan';
 import Cook from './pages/Cook';
 import Health from './pages/Health';
 import Login from './pages/Login';
@@ -40,6 +41,7 @@ export default function App() {
         <Route path="/pantry" element={<Private><Pantry /></Private>} />
         <Route path="/recipes" element={<Private><Recipes /></Private>} />
         <Route path="/family" element={<Private><Family /></Private>} />
+        <Route path="/plan" element={<Private><Plan /></Private>} />
         <Route path="/cook" element={<Private><Cook /></Private>} />
         <Route path="/health" element={<Private><Health /></Private>} />
         <Route path="/login" element={<Login />} />
