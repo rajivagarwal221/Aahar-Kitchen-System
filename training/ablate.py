@@ -8,9 +8,18 @@ Cells:
 
     python training/ablate.py                 # run everything missing
     python training/ablate.py --dry-run       # print the command plan
+    python training/ablate.py --check         # preflight only (no training)
+    python training/ablate.py --only <name> ... # restrict to named cells
+    python training/ablate.py --force          # retrain cells whose best.pt exists
 
 Writes results/ablation.csv with one row per cell for the report, and
 rebuilds results/ablation_bars.png after each cell completes.
+
+PREFLIGHT: before running any training, ablate.py validates every
+step's data config — the train and val image folders must exist and
+contain at least one supported image file — and refuses to start if
+anything is missing. This prevents the common "AMP checks passed ->
+crash mid-training" failure mode.
 """
 from __future__ import annotations
 
@@ -20,6 +29,14 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+
+try:
+    import yaml
+except ImportError:
+    print("[ablate] pyyaml missing. pip install -r training/requirements-ml.txt", file=sys.stderr)
+    sys.exit(2)
+
+IMG_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tif", ".tiff"}
 
 ROOT = Path(__file__).resolve().parents[1]
 RESULTS = ROOT / "results"
@@ -56,10 +73,95 @@ def ran(name: str) -> bool:
     return False
 
 
+def _count_images(folder: Path) -> int:
+    if not folder.exists():
+        return 0
+    n = 0
+    for p in folder.rglob("*"):
+        if p.suffix.lower() in IMG_EXTS:
+            n += 1
+    return n
+
+
+def _resolve_split(data_yaml: Path, split_value: str) -> Path:
+    """Resolve a data.yaml split path the way ultralytics does: relative to
+    the yaml's `path:` field (or the yaml's directory if `path:` is absent)."""
+    with data_yaml.open(encoding="utf-8") as fh:
+        cfg = yaml.safe_load(fh) or {}
+    base = cfg.get("path")
+    base_dir = (data_yaml.parent / base).resolve() if base else data_yaml.parent
+    return (base_dir / split_value).resolve()
+
+
+def preflight(plan: list[dict]) -> list[str]:
+    """Return a list of human-readable problems with the data configs that
+    `plan` is about to use. Empty list means every dataset is populated."""
+    seen: set[Path] = set()
+    issues: list[str] = []
+    for step in plan:
+        cfg_path = CFG / step["config"]
+        if not cfg_path.exists():
+            issues.append(f"[{step['name']}] config file missing: {cfg_path}")
+            continue
+        with cfg_path.open(encoding="utf-8") as fh:
+            cfg = yaml.safe_load(fh) or {}
+        data_rel = cfg.get("data")
+        if not data_rel:
+            issues.append(f"[{step['name']}] config has no `data:` field")
+            continue
+        data_yaml = (ROOT / data_rel).resolve()
+        if not data_yaml.exists():
+            issues.append(f"[{step['name']}] data yaml missing: {data_yaml}")
+            continue
+        if data_yaml in seen:
+            continue
+        seen.add(data_yaml)
+        with data_yaml.open(encoding="utf-8") as fh:
+            dcfg = yaml.safe_load(fh) or {}
+        for split in ("train", "val"):
+            split_rel = dcfg.get(split)
+            if not split_rel:
+                issues.append(f"[{data_yaml.name}] missing `{split}:` field")
+                continue
+            split_dir = _resolve_split(data_yaml, split_rel)
+            n = _count_images(split_dir)
+            if n == 0:
+                issues.append(
+                    f"[{data_yaml.name}] {split} folder empty: {split_dir}\n"
+                    + _fix_hint(data_yaml.name, split, split_dir)
+                )
+    return issues
+
+
+def _fix_hint(yaml_name: str, split: str, split_dir: Path) -> str:
+    """Prescriptive one-liner for the three common empty-folder cases."""
+    if yaml_name == "ahaar-fridge.yaml":
+        return (
+            "        Fix: either\n"
+            "        - shoot + label real photos into data/images/{train,val}/ and\n"
+            "          data/labels/{train,val}/ (your paper contribution), OR\n"
+            "        - python datasets/scripts/make_smoke_dataset.py  (pipeline-test only), OR\n"
+            "        - edit the config's `data:` line to datasets/indianfood20.yaml and retarget"
+        )
+    if yaml_name == "indianfood20.yaml":
+        return (
+            "        Fix:\n"
+            "        1. bash datasets/scripts/fetch_indianfood20.sh\n"
+            "        2. python datasets/scripts/_prepare_indianfood20.py --root datasets/raw/indianfood20\n"
+            "        Then re-run this command. The fetch needs a Kaggle account; place\n"
+            "        kaggle.json in %USERPROFILE%\\.kaggle\\ (Windows) or ~/.kaggle/ (*nix)."
+        )
+    return f"        Fix: place supported images under {split_dir} and rerun."
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--force", action="store_true", help="Re-run even if best.pt already exists.")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--check", action="store_true",
+                    help="Preflight-only: validate configs + datasets, don't train.")
+    ap.add_argument("--no-preflight", action="store_true",
+                    help="Skip dataset validation (not recommended).")
     ap.add_argument("--only", nargs="*", default=[],
                     help="Run only these step names (e.g. --only yolov11m_baseline).")
     args = ap.parse_args()
@@ -77,17 +179,46 @@ def main() -> None:
                 break
         plan.append(step)
 
+    if not plan:
+        print("[ablate] nothing to do — every requested cell already has a best.pt.")
+        return
+
+    # Preflight: validate every data config BEFORE training starts, so we fail
+    # loudly in seconds instead of mid-epoch.
+    if not args.no_preflight:
+        print(f"[ablate] preflight: validating datasets for {len(plan)} step(s)...")
+        issues = preflight(plan)
+        if issues:
+            print()
+            print("=" * 72)
+            print(" PREFLIGHT FAILED — fix these before training starts:")
+            print("=" * 72)
+            for i in issues:
+                print(" - " + i)
+            print()
+            print("Re-run after fixing, or pass --no-preflight to ignore (NOT recommended).")
+            sys.exit(2)
+        print("[ablate] preflight: OK.")
+
+    if args.check:
+        print("[ablate] --check: preflight passed, exiting without training.")
+        for step in plan:
+            print(f"  would run: python training/train.py --config training/configs/{step['config']}")
+        return
+
     if args.dry_run:
         for step in plan:
             print(f"  python training/train.py --config training/configs/{step['config']}")
         return
 
-    for step in plan:
+    total = len(plan)
+    for i, step in enumerate(plan, 1):
         cmd = [sys.executable, "training/train.py", "--config", f"training/configs/{step['config']}"]
-        print(f"[ablate] -> {' '.join(cmd)}")
+        print(f"\n[ablate] ({i}/{total}) -> {' '.join(cmd)}")
         subprocess.run(cmd, check=True, cwd=ROOT)
         # Skip evaluation for stage-1 cells — they're intermediate pretrains.
         if step.get("stage1"):
+            print(f"[ablate] ({i}/{total}) stage-1 done; skipping evaluate.")
             continue
         subprocess.run(
             [sys.executable, "training/evaluate.py", "--run", step["name"]],
@@ -95,6 +226,7 @@ def main() -> None:
             cwd=ROOT,
         )
         aggregate()
+    print(f"\n[ablate] all {total} step(s) complete.")
 
 
 def aggregate() -> None:

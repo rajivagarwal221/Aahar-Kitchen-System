@@ -58,15 +58,26 @@ def main() -> None:
     })
 
     n_moved, n_skipped = 0, 0
-    for folder in root.iterdir():
-        if not folder.is_dir() or folder.name in ("images", "labels"):
+    seen_folders: list[str] = []
+    recognised: list[str] = []
+    unrecognised: list[str] = []
+    # Walk recursively — Kaggle datasets often nest class folders inside a
+    # "dataset" or "images" wrapper, which the previous straight iterdir
+    # missed entirely and silently emitted zero images.
+    for folder in [p for p in root.rglob("*") if p.is_dir()]:
+        rel = folder.relative_to(root).as_posix()
+        if rel in ("", "images", "labels") or rel.startswith(("images/", "labels/")):
             continue
+        images = [p for p in folder.iterdir() if p.is_file() and p.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}]
+        if not images:
+            continue  # not a leaf class folder
+        seen_folders.append(rel)
         key = aliases.get(normalise(folder.name))
         if key is None:
-            print(f"[skip] unrecognised class folder: {folder.name}")
+            unrecognised.append(folder.name)
             continue
+        recognised.append(folder.name)
         cls_id = cls_to_id[key]
-        images = [p for p in folder.iterdir() if p.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}]
         rng.shuffle(images)
         n_val = max(1, int(len(images) * VAL_FRACTION))
         for i, src in enumerate(images):
@@ -82,7 +93,21 @@ def main() -> None:
             dst_lbl.write_text(f"{cls_id} 0.5 0.5 0.95 0.95\n", encoding="utf-8")
             n_moved += 1
 
+    print(f"[indianfood20] walked {len(seen_folders)} leaf class folders under {root}")
+    print(f"[indianfood20] recognised {len(recognised)}: {sorted(recognised)[:6]}{'...' if len(recognised)>6 else ''}")
+    if unrecognised:
+        print(f"[indianfood20] SKIPPED {len(unrecognised)} (names didn't match whitelist):")
+        for n in sorted(set(unrecognised)):
+            print(f"              - {n!r}  (normalised: {normalise(n)!r})")
+        print("[indianfood20] edit CLASSES / aliases at the top of this script to include them.")
     print(f"[indianfood20] moved {n_moved} images, skipped {n_skipped} already present.")
+    if n_moved == 0:
+        raise SystemExit(
+            "[indianfood20] FAILED: zero images moved. Likely causes:\n"
+            f"  - {root} doesn't contain any class folders yet (fetch_indianfood20.sh didn't finish)\n"
+            "  - the class folder names don't match this script's whitelist (see SKIPPED list above)\n"
+            f"  - images are nested inside a wrapper folder you can inspect with:  dir {root}"
+        )
 
 
 if __name__ == "__main__":
