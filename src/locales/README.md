@@ -6,18 +6,24 @@ runtime, so partial translations are safe to ship.
 
 ## Current coverage
 
-| Code | Language   | Script       | Primary strings        | Other strings     |
-|------|------------|--------------|------------------------|-------------------|
-| en   | English    | Latin        | full                   | full              |
-| hi   | Hindi      | Devanagari   | full                   | full              |
-| bn   | Bengali    | Bengali      | nav + CTAs + tagline   | fallback to en    |
-| ta   | Tamil      | Tamil        | nav + CTAs + tagline   | fallback to en    |
-| te   | Telugu     | Telugu       | nav + CTAs + tagline   | fallback to en    |
-| mr   | Marathi    | Devanagari   | nav + CTAs + tagline   | fallback to en    |
-| gu   | Gujarati   | Gujarati     | nav + CTAs + tagline   | fallback to en    |
-| kn   | Kannada    | Kannada      | nav + CTAs + tagline   | fallback to en    |
-| ml   | Malayalam  | Malayalam    | nav + CTAs + tagline   | fallback to en    |
-| pa   | Punjabi    | Gurmukhi     | nav + CTAs + tagline   | fallback to en    |
+All ten locales now carry the complete key set (app, nav, cta, footer,
+menu, lang). Native-speaker auditing is still recommended for the
+non-Hindi locales before they're printed on marketing material; the
+translations are idiomatic but AHAAR is a group project, not a
+localization house.
+
+| Code | Language   | Script       | Keys    | Notes |
+|------|------------|--------------|---------|-------|
+| en   | English    | Latin        | full    | source of truth |
+| hi   | Hindi      | Devanagari   | full    | primary reviewed locale |
+| bn   | Bengali    | Bengali      | full    | native-speaker audit welcome |
+| ta   | Tamil      | Tamil        | full    | native-speaker audit welcome |
+| te   | Telugu     | Telugu       | full    | native-speaker audit welcome |
+| mr   | Marathi    | Devanagari   | full    | native-speaker audit welcome |
+| gu   | Gujarati   | Gujarati     | full    | native-speaker audit welcome |
+| kn   | Kannada    | Kannada      | full    | native-speaker audit welcome |
+| ml   | Malayalam  | Malayalam    | full    | native-speaker audit welcome |
+| pa   | Punjabi    | Gurmukhi     | full    | native-speaker audit welcome |
 
 ## Adding a new string
 

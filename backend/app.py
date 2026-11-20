@@ -23,21 +23,56 @@ except ImportError as e:
     raise SystemExit("pip install ultralytics fastapi uvicorn python-multipart pillow") from e
 
 # --- model path ---------------------------------------------------------------
-# 1) If MODEL_PATH env var is set, use that.
-# 2) Else look for backend/best.pt (copied in by the user).
-# 3) Else download from the Hugging Face CDN.
+# Resolution order:
+#   1. MODEL_PATH env var (explicit absolute path on disk).
+#   2. backend/best.pt (copied in from a training run).
+#   3. MODEL_URL env var (any direct-download URL — your own mirror).
+#   4. Hugging Face: Rajiv221/aahar-ingredient-detector (default).
+#   5. MODEL_URL_FALLBACK env var (second mirror in case HF 404s).
+#
+# Keep two of {2, 3, 5} populated in production so the backend is not held
+# hostage by a single checkpoint source. Each download is written to
+# backend/best.pt and reused on subsequent boots.
+
+_HF_DEFAULT = "https://huggingface.co/Rajiv221/aahar-ingredient-detector/resolve/main/best.pt"
+_URL_PRIMARY   = os.environ.get("MODEL_URL") or _HF_DEFAULT
+_URL_FALLBACK  = os.environ.get("MODEL_URL_FALLBACK")
+
 MODEL_PATH = os.environ.get("MODEL_PATH")
 if not MODEL_PATH:
     local = Path(__file__).parent / "best.pt"
     if local.exists():
         MODEL_PATH = str(local)
     else:
+        from urllib.error import URLError, HTTPError
         from urllib.request import urlretrieve
-        print("Downloading best.pt from Hugging Face (one-time)...")
-        urlretrieve(
-            "https://huggingface.co/Rajiv221/aahar-ingredient-detector/resolve/main/best.pt",
-            str(local),
-        )
+
+        def _try(url: str) -> bool:
+            try:
+                print(f"[model] fetching best.pt from {url} ...")
+                urlretrieve(url, str(local))
+                size_mb = local.stat().st_size / (1024 * 1024)
+                print(f"[model] downloaded {size_mb:.1f} MB")
+                return True
+            except (URLError, HTTPError, OSError) as e:
+                print(f"[model] failed from {url}: {e}")
+                if local.exists():
+                    local.unlink()  # don't leave a half-file behind
+                return False
+
+        downloaded = _try(_URL_PRIMARY) or (_URL_FALLBACK and _try(_URL_FALLBACK))
+        if not downloaded:
+            raise SystemExit(
+                "\n".join([
+                    "[model] Could not fetch best.pt from any configured source.",
+                    "        Options:",
+                    "          - Copy a .pt file to backend/best.pt (cheapest),",
+                    f"          - Set MODEL_URL to a working mirror (tried {_URL_PRIMARY}),",
+                    "          - Set MODEL_URL_FALLBACK to a second mirror,",
+                    "          - Set MODEL_PATH to an absolute path on disk.",
+                    "        See backend/README.md § 'Model resolution' for details.",
+                ])
+            )
         MODEL_PATH = str(local)
 
 CONF = float(os.environ.get("CONF", "0.25"))
@@ -86,11 +121,32 @@ def display(raw: str) -> str:
 
 # --- API ----------------------------------------------------------------------
 app = FastAPI(title="AHAAR detector", version="1.0")
+
+# CORS policy:
+#   - Local dev (dev server at :5173) and the FastAPI self-origin always work.
+#   - Production origins come from the ALLOWED_ORIGINS env var, a
+#     comma-separated list of exact hostnames (e.g. "https://ahaar.vercel.app").
+#   - To fall back to wide-open for a quick demo, set ALLOWED_ORIGINS="*".
+_DEFAULT_ALLOWED = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:8000",
+]
+_env = (os.environ.get("ALLOWED_ORIGINS") or "").strip()
+if _env == "*":
+    _allowed, _allow_credentials = ["*"], False
+elif _env:
+    _allowed = [o.strip() for o in _env.split(",") if o.strip()] + _DEFAULT_ALLOWED
+    _allow_credentials = True
+else:
+    _allowed, _allow_credentials = _DEFAULT_ALLOWED, True
+print(f"[cors] allowed origins: {_allowed}")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],                # for local dev; tighten in production
+    allow_origins=_allowed,
     allow_methods=["POST", "GET"],
     allow_headers=["*"],
+    allow_credentials=_allow_credentials,
 )
 
 class Det(BaseModel):
