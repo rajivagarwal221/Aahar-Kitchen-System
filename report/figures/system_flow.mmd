@@ -1,0 +1,56 @@
+%% AHAAR end-to-end system flow for Figure 1 of the IEEE report.
+%% Render with the Mermaid CLI:
+%%
+%%   npm i -g @mermaid-js/mermaid-cli
+%%   mmdc -i report/figures/system_flow.mmd \
+%%        -o report/figures/system_flow.png \
+%%        --backgroundColor FBF6EC --scale 3
+%%
+%% Or paste into https://mermaid.live and export as SVG/PNG.
+flowchart LR
+  classDef ui       fill:#FBF6EC,stroke:#2B2420,stroke-width:1.4,color:#2B2420,rx:8,ry:8;
+  classDef model    fill:#3F6B3A,stroke:#2B2420,stroke-width:1.4,color:#FBF6EC,rx:8,ry:8;
+  classDef data     fill:#E0A21B,stroke:#2B2420,stroke-width:1.4,color:#2B2420,rx:8,ry:8;
+  classDef metric   fill:#C8693E,stroke:#2B2420,stroke-width:1.4,color:#FBF6EC,rx:8,ry:8;
+
+  %% ------ Capture lane ------
+  scan[Scan page<br/>quality gate]:::ui
+  lazy[Lazy Mode<br/>toggle]:::ui
+  detect[Detect page]:::ui
+  scan --> detect
+  scan -. optional .-> lazy
+
+  %% ------ ML lane ------
+  yolo[FastAPI backend<br/>YOLOv11m · 107 classes]:::model
+  detect --> yolo
+  yolo --> pantry
+
+  %% ------ Pantry / recipes lane ------
+  pantry[Pantry page]:::ui
+  recipes[(recipes.json<br/>450 recipes +<br/>dish nutrition)]:::data
+  rank[rankRecipes<br/>pantry 60% ·<br/>family 25% · speed 15%]:::model
+  nutrcsv[(Indian Food Nutrition CSV<br/>1,005 dishes · 1,381 variants)]:::data
+  recipes -. nutrition enrichment .- nutrcsv
+  pantry --> rank
+  recipes --> rank
+  lazy -. skip .-> rank
+  rank --> recpg[Recipes page]
+  rank --> plan[Weekly plan page]
+
+  %% ------ Cooking + logging lane ------
+  recpg --> cook[Cook-along page]
+  plan --> cook
+  cook --> mealLog[(Meal log<br/>member, recipe,<br/>time, servings)]:::data
+
+  %% ------ Health lane ------
+  cgmcsv[(CGM CSV<br/>LibreView / Dexcom)]:::data
+  cgm[parseCgmCsv]:::model
+  cgmcsv --> cgm
+  cgm --> ada[ADA 2020 metrics<br/>GMI · TIR · CV · events]:::metric
+  cgm --> gsi[computeGsi<br/>median iAUC / effective carbs]:::model
+  mealLog --> gsi
+  gsi --> rerank[predictImpact<br/>Low / Medium / High]:::model
+  rerank --> recpg
+
+  ada --> healthpg[Health page]
+  gsi --> healthpg

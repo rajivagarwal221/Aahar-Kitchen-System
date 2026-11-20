@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 620" font-family="Helvetica, Arial, sans-serif">
+  <style>
+    .ui     { fill:#FBF6EC; stroke:#2B2420; stroke-width:1.6; }
+    .model  { fill:#3F6B3A; stroke:#2B2420; stroke-width:1.6; }
+    .data   { fill:#E0A21B; stroke:#2B2420; stroke-width:1.6; }
+    .metric { fill:#C8693E; stroke:#2B2420; stroke-width:1.6; }
+    .label-dark  { fill:#2B2420; font-size:12px; font-weight:600; }
+    .label-light { fill:#FBF6EC; font-size:12px; font-weight:600; }
+    .sub-dark    { fill:#2B2420; font-size:10px; font-weight:500; }
+    .sub-light   { fill:#FBF6EC; font-size:10px; font-weight:500; }
+    .edge        { fill:none; stroke:#2B2420; stroke-width:1.4; marker-end:url(#arrow); }
+    .edge-dash   { fill:none; stroke:#2B2420; stroke-width:1.2; stroke-dasharray:4 4; marker-end:url(#arrow); }
+    .lane-label  { fill:#6F6152; font-size:11px; font-weight:700; letter-spacing:0.08em; }
+  </style>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2B2420"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="980" height="620" fill="#FBF6EC"/>
+
+  <!-- Lane labels -->
+  <text x="26" y="40"  class="lane-label">CAPTURE</text>
+  <text x="26" y="200" class="lane-label">MODEL + DATA</text>
+  <text x="26" y="360" class="lane-label">COOKING</text>
+  <text x="26" y="520" class="lane-label">HEALTH</text>
+
+  <!-- Capture lane -->
+  <g>
+    <rect x="130" y="20"  width="170" height="54" rx="10" class="ui"/>
+    <text x="215" y="42" text-anchor="middle" class="label-dark">Scan page</text>
+    <text x="215" y="60" text-anchor="middle" class="sub-dark">quality gate (light + sharpness)</text>
+
+    <rect x="330" y="20"  width="170" height="54" rx="10" class="ui"/>
+    <text x="415" y="42" text-anchor="middle" class="label-dark">Detect page</text>
+    <text x="415" y="60" text-anchor="middle" class="sub-dark">bbox overlay + accept</text>
+
+    <rect x="530" y="20"  width="170" height="54" rx="10" class="ui"/>
+    <text x="615" y="42" text-anchor="middle" class="label-dark">Lazy Mode</text>
+    <text x="615" y="60" text-anchor="middle" class="sub-dark">skip pantry edit</text>
+
+    <!-- Edges -->
+    <path d="M 300 47 L 330 47" class="edge"/>
+    <path d="M 500 47 L 530 47" class="edge-dash"/>
+  </g>
+
+  <!-- Model + data lane -->
+  <g>
+    <rect x="130" y="180" width="200" height="60" rx="10" class="model"/>
+    <text x="230" y="204" text-anchor="middle" class="label-light">FastAPI backend</text>
+    <text x="230" y="222" text-anchor="middle" class="sub-light">YOLOv11m · 107 classes</text>
+
+    <rect x="370" y="180" width="200" height="60" rx="10" class="data"/>
+    <text x="470" y="204" text-anchor="middle" class="label-dark">recipes.json</text>
+    <text x="470" y="222" text-anchor="middle" class="sub-dark">450 recipes + dish nutrition</text>
+
+    <rect x="610" y="180" width="200" height="60" rx="10" class="model"/>
+    <text x="710" y="204" text-anchor="middle" class="label-light">rankRecipes</text>
+    <text x="710" y="222" text-anchor="middle" class="sub-light">60% pantry + 25% family + 15% speed</text>
+
+    <rect x="610" y="90"  width="200" height="50" rx="10" class="data"/>
+    <text x="710" y="112" text-anchor="middle" class="label-dark">Indian Food Nutrition CSV</text>
+    <text x="710" y="128" text-anchor="middle" class="sub-dark">1,005 dishes · 1,381 variants</text>
+
+    <!-- Edges -->
+    <path d="M 415 74 Q 320 100 230 180" class="edge"/>
+    <path d="M 710 140 Q 710 150 710 180" class="edge-dash"/>
+    <path d="M 570 145 Q 520 170 470 180" class="edge-dash"/>
+    <path d="M 330 210 L 370 210" class="edge"/>
+    <path d="M 570 210 L 610 210" class="edge"/>
+    <path d="M 615 74 Q 710 120 710 180" class="edge-dash"/>
+  </g>
+
+  <!-- Cooking lane -->
+  <g>
+    <rect x="130" y="340" width="200" height="60" rx="10" class="ui"/>
+    <text x="230" y="364" text-anchor="middle" class="label-dark">Recipes page</text>
+    <text x="230" y="382" text-anchor="middle" class="sub-dark">filters, sort, impact chip</text>
+
+    <rect x="370" y="340" width="200" height="60" rx="10" class="ui"/>
+    <text x="470" y="364" text-anchor="middle" class="label-dark">Weekly plan page</text>
+    <text x="470" y="382" text-anchor="middle" class="sub-dark">7 × 3 grid, weekly nutrition</text>
+
+    <rect x="610" y="340" width="200" height="60" rx="10" class="ui"/>
+    <text x="710" y="364" text-anchor="middle" class="label-dark">Cook-along page</text>
+    <text x="710" y="382" text-anchor="middle" class="sub-dark">steps · voice · meal log</text>
+
+    <rect x="610" y="430" width="200" height="54" rx="10" class="data"/>
+    <text x="710" y="452" text-anchor="middle" class="label-dark">Meal log</text>
+    <text x="710" y="468" text-anchor="middle" class="sub-dark">member · recipe · time · servings</text>
+
+    <!-- Edges -->
+    <path d="M 710 240 L 710 340" class="edge"/>
+    <path d="M 650 240 Q 500 290 470 340" class="edge"/>
+    <path d="M 570 370 L 610 370" class="edge"/>
+    <path d="M 330 370 L 370 370" class="edge"/>
+    <path d="M 710 400 L 710 430" class="edge"/>
+  </g>
+
+  <!-- Health lane -->
+  <g>
+    <rect x="130" y="500" width="200" height="54" rx="10" class="data"/>
+    <text x="230" y="522" text-anchor="middle" class="label-dark">CGM CSV</text>
+    <text x="230" y="538" text-anchor="middle" class="sub-dark">LibreView · Dexcom · generic</text>
+
+    <rect x="370" y="500" width="200" height="54" rx="10" class="model"/>
+    <text x="470" y="522" text-anchor="middle" class="label-light">parseCgmCsv + computeStats</text>
+    <text x="470" y="538" text-anchor="middle" class="sub-light">GMI · TIR · CV · events</text>
+
+    <rect x="610" y="500" width="200" height="54" rx="10" class="model"/>
+    <text x="710" y="522" text-anchor="middle" class="label-light">computeGsi</text>
+    <text x="710" y="538" text-anchor="middle" class="sub-light">median iAUC / effective carbs</text>
+
+    <rect x="850" y="430" width="110" height="54" rx="10" class="metric"/>
+    <text x="905" y="452" text-anchor="middle" class="label-light">Health page</text>
+    <text x="905" y="468" text-anchor="middle" class="sub-light">ADA + GSI model</text>
+
+    <rect x="850" y="340" width="110" height="60" rx="10" class="metric"/>
+    <text x="905" y="364" text-anchor="middle" class="label-light">predictImpact</text>
+    <text x="905" y="382" text-anchor="middle" class="sub-light">Low / Med / High</text>
+
+    <!-- Edges -->
+    <path d="M 330 527 L 370 527" class="edge"/>
+    <path d="M 570 527 L 610 527" class="edge"/>
+    <path d="M 710 457 L 710 500" class="edge-dash"/>
+    <path d="M 810 527 L 850 490" class="edge"/>
+    <path d="M 810 490 Q 850 430 905 400" class="edge"/>
+    <path d="M 905 340 Q 905 290 850 240" class="edge"/>
+    <path d="M 840 370 L 810 370" class="edge" style="marker-end:url(#arrow)"/>
+  </g>
+
+  <!-- Legend -->
+  <g transform="translate(130, 580)">
+    <rect x="0"   y="0" width="18" height="14" rx="4" class="ui"/>     <text x="24"  y="11" class="sub-dark">UI</text>
+    <rect x="80"  y="0" width="18" height="14" rx="4" class="model"/>  <text x="104" y="11" class="sub-dark">Model</text>
+    <rect x="170" y="0" width="18" height="14" rx="4" class="data"/>   <text x="194" y="11" class="sub-dark">Data</text>
+    <rect x="260" y="0" width="18" height="14" rx="4" class="metric"/> <text x="284" y="11" class="sub-dark">Metrics</text>
+    <line x1="360" y1="7" x2="400" y2="7" class="edge-dash"/>          <text x="408" y="11" class="sub-dark">optional</text>
+  </g>
+</svg>
