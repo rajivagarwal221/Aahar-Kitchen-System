@@ -1,0 +1,36 @@
+{
+  "app": {
+    "name": "AHAAR",
+    "tagline": "Open the fridge. Know what's for dinner.",
+    "notMedicalAdvice": "Guidance, not medical advice."
+  },
+  "nav": {
+    "scan": "Scan",
+    "detect": "Detect",
+    "pantry": "Pantry",
+    "recipes": "Recipes",
+    "family": "Family",
+    "cook": "Cook",
+    "health": "Health"
+  },
+  "cta": {
+    "scanFridge": "Scan fridge",
+    "signIn": "Sign in",
+    "signOut": "Sign out",
+    "account": "Account"
+  },
+  "footer": {
+    "householdNutrition": "Household Nutrition",
+    "householdBody": "Every family member has distinct metabolic and vitality needs. AHAAR dynamically calibrates Indian home thalis for blood pressure, blood glucose, and daily energy.",
+    "features": "Features"
+  },
+  "menu": {
+    "open": "Open menu",
+    "close": "Close menu",
+    "main": "Main",
+    "mobile": "Mobile"
+  },
+  "lang": {
+    "label": "Language"
+  }
+}

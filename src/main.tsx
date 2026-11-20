@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import { AuthProvider, useAuth } from './lib/auth';
 import { KitchenProvider } from './lib/store';
+import './lib/i18n';
 import './index.css';
 
 // Remounting on account change swaps in that account's saved kitchen.
