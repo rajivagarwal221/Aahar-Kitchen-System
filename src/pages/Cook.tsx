@@ -2,8 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { NextStep, Page, PageHeader, ease } from '../components/Page';
-import { Arrow, Back, Check, Pause, Play, Reset, Timer } from '../components/Icons';
+import { Arrow, Back, Check, Pause, Play, Plus, Reset, Timer } from '../components/Icons';
 import { Nutrition, Recipe, rankRecipes, useRecipes } from '../lib/recipes';
+import { uid } from '../lib/quality';
 import { useKitchen } from '../lib/store';
 import { VoiceCommand, canListen, canSpeak, useVoice } from '../lib/voice';
 
@@ -59,8 +60,40 @@ export default function Cook() {
 }
 
 function CookAlong({ recipe }: { recipe: Recipe }) {
-  const { items, members } = useKitchen();
+  const { items, members, addMeal } = useKitchen();
   const pantry = useMemo(() => new Set(items.map((i) => i.id)), [items]);
+  const [logMemberId, setLogMemberId] = useState<number>(members[0]?.id ?? 0);
+  const [logServings, setLogServings] = useState<number>(1);
+  const [logTs, setLogTs] = useState<string>(() => {
+    // Default: now, formatted for an <input type="datetime-local" />.
+    const d = new Date();
+    d.setSeconds(0, 0);
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  });
+  const [logged, setLogged] = useState(false);
+
+  const logMeal = () => {
+    addMeal({
+      id: uid(),
+      memberId: logMemberId,
+      recipeId: recipe.id,
+      recipeName: recipe.name,
+      ts: new Date(logTs).toISOString(),
+      servings: logServings,
+      nutrition: recipe.nutrition
+        ? {
+            calories: recipe.nutrition.calories,
+            carbs:    recipe.nutrition.carbs,
+            protein:  recipe.nutrition.protein,
+            fat:      recipe.nutrition.fat,
+            sugar:    recipe.nutrition.sugar,
+            fibre:    recipe.nutrition.fibre,
+          }
+        : undefined,
+    });
+    setLogged(true);
+    window.setTimeout(() => setLogged(false), 2000);
+  };
   const [step, setStep] = useState(0);
   const [left, setLeft] = useState(recipe.steps[0].seconds);
   const [running, setRunning] = useState(false);
@@ -340,6 +373,61 @@ function CookAlong({ recipe }: { recipe: Recipe }) {
       </section>
 
       <NutritionPanel nutrition={recipe.nutrition} servings={recipe.servings} members={members.length} />
+
+      <section className="card p-5 md:p-6 mt-6">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <p className="kicker text-leaf">Meal log</p>
+            <h2 className="font-display text-xl mt-0.5">Record that this was eaten</h2>
+            <p className="mt-1 text-[0.82rem] text-muted max-w-[60ch]">
+              Logging this meal lets AHAAR line it up with each person&apos;s CGM curve (if they have one)
+              and learn how their body responds to {recipe.name}. Over a few meals it starts predicting
+              which future recipes will spike their glucose.
+            </p>
+          </div>
+        </div>
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-4 gap-3">
+          <label className="block text-[0.8rem] font-medium text-muted">
+            For
+            <select
+              value={logMemberId}
+              onChange={(e) => setLogMemberId(Number(e.target.value))}
+              className="mt-1 w-full h-11 px-3 rounded-xl border border-ink/15 bg-white focus:outline-none focus:border-leaf"
+            >
+              {members.map((m) => (
+                <option key={m.id} value={m.id}>{m.name || `Member ${m.id}`}</option>
+              ))}
+            </select>
+          </label>
+          <label className="block text-[0.8rem] font-medium text-muted">
+            Servings
+            <input
+              type="number"
+              min={0.5}
+              step={0.5}
+              value={logServings}
+              onChange={(e) => setLogServings(Math.max(0.5, Number(e.target.value) || 1))}
+              className="mt-1 w-full h-11 px-3 rounded-xl border border-ink/15 bg-white focus:outline-none focus:border-leaf tabular-nums"
+            />
+          </label>
+          <label className="block text-[0.8rem] font-medium text-muted sm:col-span-2">
+            Eaten at
+            <input
+              type="datetime-local"
+              value={logTs}
+              onChange={(e) => setLogTs(e.target.value)}
+              className="mt-1 w-full h-11 px-3 rounded-xl border border-ink/15 bg-white focus:outline-none focus:border-leaf"
+            />
+          </label>
+        </div>
+        <button
+          className="btn-accent mt-4"
+          onClick={logMeal}
+          disabled={!members.length}
+        >
+          {logged ? <><Check width={16} /> Logged</> : <><Plus width={16} /> Log this meal</>}
+        </button>
+      </section>
 
       <NextStep to="/health" label="Family health log" hint="Log blood pressure and heart rate after the meal." />
     </Page>

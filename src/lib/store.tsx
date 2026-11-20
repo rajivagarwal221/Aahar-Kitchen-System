@@ -29,6 +29,26 @@ export type GlucosePoint = {
   mgdl: number;
 };
 
+/** One meal eaten by a family member. Used to align the next 2-hour CGM
+ * window against the dish's nutrition so AHAAR can learn each person's
+ * glycemic sensitivity and re-rank recipes accordingly. */
+export type MealEntry = {
+  id: string;
+  memberId: number;
+  recipeId: string;
+  recipeName: string;
+  ts: string;             // ISO instant the meal was eaten
+  servings: number;       // how many AHAAR servings the member ate
+  nutrition?: {           // snapshot of the dish's per-serving nutrition at log time
+    calories: number;
+    carbs: number;
+    protein: number;
+    fat: number;
+    sugar: number;
+    fibre: number;
+  };
+};
+
 export type ShoppingEntry = { id: string; name: string };
 
 const START_MEMBERS: Member[] = [
@@ -44,6 +64,7 @@ type Saved = {
   members: Member[];
   readings: Reading[];
   glucose: GlucosePoint[];
+  meals: MealEntry[];
 };
 
 type Kitchen = Saved & {
@@ -61,6 +82,8 @@ type Kitchen = Saved & {
   removeReading: (id: string) => void;
   addGlucose: (points: GlucosePoint[]) => void;
   clearGlucose: (memberId: number) => void;
+  addMeal: (m: MealEntry) => void;
+  removeMeal: (id: string) => void;
   detected: boolean;
   setDetected: (v: boolean) => void;
 };
@@ -68,7 +91,7 @@ type Kitchen = Saved & {
 const KEY = 'ahaar:v1';
 /** Each signed-in account gets its own saved kitchen; guests share the base key. */
 const keyFor = (userId: string | null) => (userId ? `${KEY}:${userId}` : KEY);
-const EMPTY: Saved = { items: [], shopping: [], members: START_MEMBERS, readings: [], glucose: [] };
+const EMPTY: Saved = { items: [], shopping: [], members: START_MEMBERS, readings: [], glucose: [], meals: [] };
 
 function load(key: string): Saved {
   try {
@@ -81,6 +104,7 @@ function load(key: string): Saved {
       members: Array.isArray(v.members) && v.members.length > 0 ? v.members : START_MEMBERS,
       readings: Array.isArray(v.readings) ? v.readings : [],
       glucose: Array.isArray(v.glucose) ? v.glucose : [],
+      meals: Array.isArray(v.meals) ? v.meals : [],
     };
   } catch {
     return EMPTY;
@@ -149,6 +173,10 @@ export function KitchenProvider({ userId, children }: { userId: string | null; c
         }),
       clearGlucose: (memberId) =>
         patch((s) => ({ glucose: s.glucose.filter((g) => g.memberId !== memberId) })),
+      addMeal: (m) =>
+        patch((s) => ({ meals: [...s.meals, m].sort((a, b) => b.ts.localeCompare(a.ts)) })),
+      removeMeal: (id) =>
+        patch((s) => ({ meals: s.meals.filter((m) => m.id !== id) })),
       detected,
       setDetected,
     };
