@@ -21,4 +21,7 @@ runs/
 *.onnx
 *.tflite
 !data/images/**/.gitkeep
+# Smoke-test tripwire written by datasets/scripts/make_smoke_dataset.py
+# is intentionally local-only — never commit it.
+data/images/**/.AHAAR_SMOKE_MARKER
 !data/labels/**/.gitkeep
