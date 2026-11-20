@@ -102,6 +102,12 @@ def main() -> None:
     # ablate.py / evaluate.py / plot.py can trust the path. Pass exist_ok
     # via the YAML to opt out of this.
     train_kwargs.setdefault("exist_ok", True)
+    # Ultralytics 8.4+ prepends its own "runs/detect/" to any relative
+    # project path, which breaks the path contract downstream scripts
+    # assume. Pin the project to an absolute path under the repo root so
+    # weights always land at results/<name>/weights/best.pt.
+    proj = train_kwargs.get("project", "results")
+    train_kwargs["project"] = str((ROOT / proj).resolve())
 
     model = YOLO(model_arg)
     results = model.train(**train_kwargs)

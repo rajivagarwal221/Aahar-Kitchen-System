@@ -67,14 +67,17 @@ def main() -> None:
     run_dir = RESULTS / args.run
     weights = args.weights or (run_dir / "weights/best.pt")
     if not weights.exists() and args.weights is None:
-        # Ultralytics auto-renames to <name>2, <name>3, ... when the target
-        # directory already exists. Find the newest sibling that actually
-        # contains best.pt and use that, so users don't have to pass
-        # --weights manually.
-        candidates = sorted(
-            [p for p in RESULTS.glob(f"{args.run}*/weights/best.pt")],
-            key=lambda p: p.stat().st_mtime,
-        )
+        # Weights can land in two off-path locations:
+        #   1. ultralytics renames collisions as <name>2, <name>3, ...
+        #   2. ultralytics 8.4+ prepends "runs/detect/" to a relative project
+        # Hunt under both roots for the newest matching best.pt and fall back
+        # to it, so users don't have to pass --weights manually.
+        search_roots = [RESULTS, ROOT / "runs/detect/results"]
+        candidates: list[Path] = []
+        for root in search_roots:
+            if root.exists():
+                candidates.extend(root.glob(f"{args.run}*/weights/best.pt"))
+        candidates.sort(key=lambda p: p.stat().st_mtime)
         if candidates:
             weights = candidates[-1]
             run_dir = weights.parent.parent

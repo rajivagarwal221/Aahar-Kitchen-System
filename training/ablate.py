@@ -44,7 +44,16 @@ STEPS: list[dict] = [
 
 
 def ran(name: str) -> bool:
-    return (RESULTS / name / "weights" / "best.pt").exists()
+    """A cell is 'done' if its best.pt exists anywhere a prior train.py
+    might have written it (results/<name>, or the ultralytics 8.4+
+    runs/detect/results/<name>[-N] fallback)."""
+    expected = RESULTS / name / "weights" / "best.pt"
+    if expected.exists():
+        return True
+    legacy = ROOT / "runs/detect/results"
+    if legacy.exists() and any(legacy.glob(f"{name}*/weights/best.pt")):
+        return True
+    return False
 
 
 def main() -> None:
