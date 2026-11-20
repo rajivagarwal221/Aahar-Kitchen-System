@@ -84,13 +84,36 @@ def _count_images(folder: Path) -> int:
 
 
 def _resolve_split(data_yaml: Path, split_value: str) -> Path:
-    """Resolve a data.yaml split path the way ultralytics does: relative to
-    the yaml's `path:` field (or the yaml's directory if `path:` is absent)."""
+    """Resolve a data.yaml split path the way ultralytics does.
+
+    Ultralytics' resolution order for a relative `path:` is:
+      1. CWD (ROOT when ablate.py is invoked from the repo root)
+      2. the yaml's own directory
+      3. ultralytics settings' datasets_dir
+    We try (1) then (2) and return the first one whose split folder exists.
+    When `path:` is absolute, use it directly. When `path:` is absent,
+    fall back to the yaml's directory.
+    """
     with data_yaml.open(encoding="utf-8") as fh:
         cfg = yaml.safe_load(fh) or {}
     base = cfg.get("path")
-    base_dir = (data_yaml.parent / base).resolve() if base else data_yaml.parent
-    return (base_dir / split_value).resolve()
+    if not base:
+        return (data_yaml.parent / split_value).resolve()
+
+    base_p = Path(base)
+    if base_p.is_absolute():
+        return (base_p / split_value).resolve()
+
+    candidates = [
+        (ROOT / base_p / split_value).resolve(),
+        (data_yaml.parent / base_p / split_value).resolve(),
+    ]
+    for c in candidates:
+        if c.exists():
+            return c
+    # Fall back to the ROOT-relative candidate for the error message —
+    # that's the layout the configs document.
+    return candidates[0]
 
 
 def preflight(plan: list[dict]) -> list[str]:
