@@ -1,0 +1,17 @@
+# Stage-1 companion for the YOLOv11l branch of the ablation.
+
+run_id: yolov11l_if20pretrain_stage1
+model: yolo11l.pt
+data:  datasets/indianfood20.yaml
+imgsz: 640
+epochs: 60
+batch: 8
+patience: 20
+optimizer: auto
+lr0: 0.01
+seed: 42
+device: 0
+project: results
+name: yolov11l_if20pretrain_stage1
+amp: true
+cache: ram

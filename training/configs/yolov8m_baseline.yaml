@@ -1,0 +1,19 @@
+# Baseline — YOLOv8m on AHAAR-Fridge, no intermediate pretrain beyond COCO.
+# Smallest backbone of the four ablation cells. Fastest to train on an
+# RTX 3050 (~45 min for 50 epochs @ 640 px on ~2000 images).
+
+run_id: yolov8m_baseline
+model: yolov8m.pt           # ultralytics auto-downloads from GitHub Releases
+data:  datasets/ahaar-fridge.yaml
+imgsz: 640
+epochs: 50
+batch: 16
+patience: 15                # early-stop if val mAP hasn't improved for 15 epochs
+optimizer: auto             # ultralytics picks between SGD and AdamW
+lr0: 0.01
+seed: 42
+device: 0                   # set to 'cpu' on a laptop without CUDA
+project: results
+name: yolov8m_baseline      # writes results/yolov8m_baseline/weights/best.pt
+amp: true                   # mixed precision
+cache: ram                  # keep the 20-class dataset in RAM for speed

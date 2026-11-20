@@ -1,0 +1,9 @@
+# Extra deps for the AHAAR training/eval pipeline beyond backend/requirements.txt.
+# Install with:  pip install -r training/requirements-ml.txt
+ultralytics>=8.3.0       # YOLOv8 / YOLOv11 training + val
+torch>=2.1.0             # CUDA build chosen by ultralytics' installer
+torchvision>=0.16.0
+pyyaml>=6.0.1
+matplotlib>=3.8.0
+pandas>=2.2.0
+kaggle>=1.6.0            # only needed for datasets/scripts/fetch_indianfood20.sh

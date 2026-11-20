@@ -1,0 +1,135 @@
+"""Evaluate a trained YOLO checkpoint and emit paper-ready metrics.
+
+    python training/evaluate.py --run yolov11m_baseline
+
+Writes:
+    results/<run>/metrics.json   — mAP@50, mAP@50-95, overall P, R, F1,
+                                   per-class rows, latency (CPU & CUDA),
+                                   model size (MB) and parameter count.
+    results/<run>/per_class.csv  — one row per class for easy citation.
+
+Metrics follow the ultralytics `val()` convention; latency is measured
+over 100 warm-up + 300 timed runs on a 640x640 zero tensor.
+"""
+from __future__ import annotations
+
+import argparse
+import csv
+import json
+import statistics
+import sys
+import time
+from pathlib import Path
+
+try:
+    import numpy as np
+    import torch
+    from ultralytics import YOLO
+    import yaml
+except ImportError as e:  # pragma: no cover
+    print(f"[evaluate.py] missing dependency: {e}", file=sys.stderr)
+    sys.exit(2)
+
+ROOT = Path(__file__).resolve().parents[1]
+RESULTS = ROOT / "results"
+
+
+def load_data_yaml(data_path: str) -> dict:
+    with (ROOT / data_path).open(encoding="utf-8") as fh:
+        return yaml.safe_load(fh)
+
+
+def measure_latency(model: YOLO, device: str, warm: int = 100, iters: int = 300) -> float:
+    """Return median ms/image for a 640x640 random input on the given device."""
+    arr = np.zeros((640, 640, 3), dtype=np.uint8)
+    for _ in range(warm):
+        model.predict(arr, verbose=False, device=device)
+    times: list[float] = []
+    for _ in range(iters):
+        t0 = time.perf_counter()
+        model.predict(arr, verbose=False, device=device)
+        times.append((time.perf_counter() - t0) * 1000)
+    return float(statistics.median(times))
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--run", required=True,
+                    help="Run name, e.g. 'yolov11m_baseline' — matches the ultralytics project dir.")
+    ap.add_argument("--weights", type=Path, default=None,
+                    help="Optional explicit weights path. Defaults to results/<run>/weights/best.pt.")
+    ap.add_argument("--data", type=Path, default=ROOT / "datasets/ahaar-fridge.yaml",
+                    help="YOLO data yaml the eval runs against (same as training by default).")
+    ap.add_argument("--no-latency", action="store_true",
+                    help="Skip latency measurement (useful on CI without GPU).")
+    args = ap.parse_args()
+
+    run_dir = RESULTS / args.run
+    weights = args.weights or (run_dir / "weights/best.pt")
+    if not weights.exists():
+        raise SystemExit(f"[evaluate.py] weights not found: {weights}")
+
+    model = YOLO(str(weights))
+    val = model.val(data=str(args.data), split="val", verbose=False, plots=True)
+
+    # Ultralytics stores per-class results on `val.box`.
+    names = model.names if isinstance(model.names, dict) else {i: n for i, n in enumerate(model.names)}
+    box = val.box  # object with maps_per_class attribute
+    per_class = []
+    for cls_id, cls_name in sorted(names.items()):
+        try:
+            idx = list(box.ap_class_index).index(cls_id)
+        except ValueError:
+            per_class.append({
+                "class_id": int(cls_id), "name": cls_name,
+                "precision": 0.0, "recall": 0.0, "map50": 0.0, "map50_95": 0.0, "support": 0,
+            })
+            continue
+        per_class.append({
+            "class_id": int(cls_id),
+            "name": cls_name,
+            "precision": round(float(box.p[idx]), 4),
+            "recall":    round(float(box.r[idx]), 4),
+            "map50":     round(float(box.ap50[idx]), 4),
+            "map50_95":  round(float(box.ap[idx]), 4),
+            "support":   int(box.nt_per_class[idx]) if hasattr(box, "nt_per_class") else 0,
+        })
+
+    params = sum(p.numel() for p in model.model.parameters())
+    size_mb = weights.stat().st_size / (1024 * 1024)
+
+    latency = {"cpu_ms_per_image": None, "cuda_ms_per_image": None}
+    if not args.no_latency:
+        latency["cpu_ms_per_image"] = round(measure_latency(model, "cpu"), 2)
+        if torch.cuda.is_available():
+            latency["cuda_ms_per_image"] = round(measure_latency(model, "cuda:0"), 2)
+
+    metrics = {
+        "run": args.run,
+        "weights": str(weights.relative_to(ROOT)),
+        "data": str(args.data.relative_to(ROOT)),
+        "map50": round(float(box.map50), 4),
+        "map50_95": round(float(box.map), 4),
+        "precision": round(float(box.mp), 4),
+        "recall": round(float(box.mr), 4),
+        "f1": round(2 * float(box.mp) * float(box.mr) / max(1e-9, float(box.mp) + float(box.mr)), 4),
+        "per_class": per_class,
+        "parameters_m": round(params / 1_000_000, 2),
+        "weights_mb": round(size_mb, 2),
+        "latency": latency,
+    }
+
+    run_dir.mkdir(parents=True, exist_ok=True)
+    (run_dir / "metrics.json").write_text(json.dumps(metrics, indent=2), encoding="utf-8")
+    with (run_dir / "per_class.csv").open("w", newline="", encoding="utf-8") as fh:
+        w = csv.DictWriter(fh, fieldnames=list(per_class[0].keys()))
+        w.writeheader()
+        w.writerows(per_class)
+
+    print(f"[evaluate.py] {args.run}: mAP50={metrics['map50']}  mAP50-95={metrics['map50_95']}"
+          f"  P={metrics['precision']}  R={metrics['recall']}  F1={metrics['f1']}")
+    print(f"[evaluate.py] wrote {run_dir / 'metrics.json'}")
+
+
+if __name__ == "__main__":
+    main()

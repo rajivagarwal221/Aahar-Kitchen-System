@@ -1,0 +1,40 @@
+# AHAAR-Fridge dataset — fridge-interior Indian ingredients.
+#
+# Layout:
+#   data/images/train/*.jpg  (annotated photos shot by the group)
+#   data/images/val/*.jpg
+#   data/labels/train/*.txt  (YOLO format: cls xc yc w h, normalized 0-1)
+#   data/labels/val/*.txt
+#
+# The 20 classes below are the intersection of (a) the detector's 107
+# pantry classes and (b) ingredients commonly visible on a fridge
+# shelf. Shoot ~150 photos per class in realistic household lighting
+# (tube-light, LED, warm bulb, door-light). A 120/30 train/val split
+# per class is enough to beat demo quality; for a publishable number
+# aim for 500-1000 images per class.
+
+path: ./data
+train: images/train
+val:   images/val
+
+names:
+  0:  tomato
+  1:  onion
+  2:  paneer
+  3:  milk
+  4:  spinach
+  5:  green_chilli
+  6:  ginger
+  7:  garlic
+  8:  potato
+  9:  cauliflower
+  10: carrot
+  11: okra
+  12: lemon
+  13: curd_yogurt
+  14: ghee
+  15: butter
+  16: eggs
+  17: coriander_leaves
+  18: curry_leaves
+  19: methi_leaves

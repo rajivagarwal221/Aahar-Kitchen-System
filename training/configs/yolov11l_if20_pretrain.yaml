@@ -1,0 +1,20 @@
+# Largest ablation cell — YOLOv11l with the full two-stage transfer.
+# ~2.3x slower per epoch than v11m on a 3050 and ~1.7x the VRAM, so
+# expect to lower `batch` to 8 if OOM.
+
+run_id: yolov11l_if20_pretrain
+model: results/yolov11l_if20pretrain_stage1/weights/best.pt
+data:  datasets/ahaar-fridge.yaml
+imgsz: 640
+epochs: 50
+batch: 8
+patience: 15
+optimizer: auto
+lr0: 0.005
+seed: 42
+device: 0
+project: results
+name: yolov11l_if20_pretrain
+amp: true
+cache: ram
+freeze: 10

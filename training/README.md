@@ -1,35 +1,179 @@
-# AAhar food-detector training
+# AHAAR detector — training protocol
 
-Two-click workflow: open the Colab notebook, Run All, walk away.
+Reproducible YOLO training, evaluation, and ablation for the AHAAR
+fridge-interior ingredient detector. Everything below runs from a cold
+clone on an RTX 3050 (or any CUDA-capable GPU; drop `device: 0` to
+`cpu` in the configs to run on CPU, slowly).
 
-## Layout
+The pipeline produces every number and plot the IEEE project report
+embeds in §VII (mAP@50, mAP@50:95, per-class precision/recall, latency,
+and a four-cell ablation bar chart).
+
+---
+
+## 0 · Install
+
+```bash
+# Optional: isolate from the backend deps
+python -m venv .venv && source .venv/bin/activate
+pip install -r training/requirements-ml.txt
+```
+
+Ultralytics will auto-download the base YOLO weights
+(`yolov8m.pt`, `yolo11m.pt`, `yolo11l.pt`) on first use.
+
+---
+
+## 1 · Datasets
+
+### AHAAR-Fridge (the primary contribution)
+
+**You shoot this.** Target: 20 Indian pantry classes × ~150 photos per
+class in realistic household lighting (tube-light, LED, warm bulb,
+door-light). A 120/30 train/val split per class is enough for demo
+quality; publishable numbers want 500–1000 images per class.
+
+Required on-disk layout (already created as empty `.gitkeep`
+placeholders):
 
 ```
 data/
-  images/{train,val}/   # one .jpg/.png per sample
-  labels/{train,val}/   # one .txt per image, YOLO format: `<class_id> <xc> <yc> <w> <h>` (normalized 0-1)
-aahar.yaml              # YOLO dataset config - classes auto-populated by notebook
-notebooks/
-  train_aahar_detector.ipynb   # Run All on a Colab T4
+  images/train/*.jpg
+  images/val/*.jpg
+  labels/train/*.txt   # YOLO format: cls xc yc w h, normalised 0–1
+  labels/val/*.txt
 ```
 
-## Getting the dataset onto Colab
+Class list and `data.yaml` are in `datasets/ahaar-fridge.yaml`. Label
+with [Roboflow](https://roboflow.com) or [LabelImg](https://github.com/HumanSignal/labelImg).
 
-The notebook accepts one of:
-- `DATASET_SOURCE="hf://<repo-id>"` - pulls a Hugging Face dataset
-- `DATASET_SOURCE="gdrive://<folder-id>"` - mounts Drive and copies
-- `DATASET_SOURCE="url://<zip-url>"` - downloads and unzips
+### IndianFood20 (the stage-1 pretraining target)
 
-Set the variable in the first config cell before Run All.
+Dish-level (plated) Indian food, 20 classes, from Pandey et al.,
+IEEE ICDEW 2022 (arXiv:2205.04841). Used only to pre-season the
+backbone before fine-tuning on AHAAR-Fridge.
 
-## Secrets
+```bash
+# needs a free Kaggle account + kaggle.json in ~/.kaggle/
+bash datasets/scripts/fetch_indianfood20.sh
+```
 
-- `HF_TOKEN` - the notebook reads it from a Colab secret (left sidebar → key icon → "Add new secret"). Used only to push `best.pt` + ONNX + TFLite to your HF model repo.
+The script downloads, unzips, drops classes outside AHAAR's whitelist,
+and rewrites the folder-per-class layout into YOLO form. Final location:
+`datasets/raw/indianfood20/` (git-ignored).
 
-## Outputs
+---
 
-After training the notebook uploads to `<HF_USERNAME>/aahar-detector`:
-- `best.pt` - PyTorch weights
-- `best.onnx` - for `onnxruntime-web` on the frontend
-- `best.tflite` - for mobile
-- `aahar.yaml` - class list snapshot
+## 2 · Train
+
+Each ablation cell has its own YAML; nothing else differs between
+runs. `train.py` is a thin wrapper that forwards the YAML straight to
+`ultralytics.YOLO.train()`.
+
+```bash
+# Baselines (~45 min each on an RTX 3050 @ 50 epochs, 640 px)
+python training/train.py --config training/configs/yolov8m_baseline.yaml
+python training/train.py --config training/configs/yolov11m_baseline.yaml
+
+# Two-stage transfer: first the stage-1 pretrain on IndianFood20…
+python training/train.py --config training/configs/stage1_if20_yolov11m.yaml
+python training/train.py --config training/configs/stage1_if20_yolov11l.yaml
+
+# …then the stage-2 fine-tune on AHAAR-Fridge.
+python training/train.py --config training/configs/yolov11m_if20_pretrain.yaml
+python training/train.py --config training/configs/yolov11l_if20_pretrain.yaml
+```
+
+Weights land at `results/<run>/weights/best.pt`; per-epoch metrics at
+`results/<run>/results.csv`.
+
+---
+
+## 3 · Evaluate
+
+```bash
+python training/evaluate.py --run yolov11m_baseline
+```
+
+Writes two artifacts under `results/<run>/`:
+
+| File                | Contents                                         |
+|---------------------|--------------------------------------------------|
+| `metrics.json`      | mAP@50, mAP@50:95, overall P/R/F1, latency (CPU & CUDA), parameters, weights size, and a `per_class` array |
+| `per_class.csv`     | one row per class, directly citable in the report |
+
+Pass `--no-latency` on CI runners without a GPU.
+
+---
+
+## 4 · Ablation (one command)
+
+```bash
+python training/ablate.py           # run everything missing
+python training/ablate.py --dry-run # print the plan without running
+python training/ablate.py --only yolov11m_baseline yolov8m_baseline
+```
+
+After each cell completes the script re-aggregates
+`results/ablation.csv`, which is the table the report cites:
+
+| run                     | label                         | mAP@50 | mAP@50:95 | P | R | F1 | params M | weights MB | CPU ms | CUDA ms |
+|-------------------------|-------------------------------|--------|-----------|---|---|----|----------|------------|--------|---------|
+| yolov8m_baseline        | YOLOv8m (baseline)            |   —    |     —     | — | — | —  |    —     |     —      |   —    |    —    |
+| yolov11m_baseline       | YOLOv11m (baseline)           |   —    |     —     | — | — | —  |    —     |     —      |   —    |    —    |
+| yolov11m_if20_pretrain  | YOLOv11m + IF20 pretrain      |   —    |     —     | — | — | —  |    —     |     —      |   —    |    —    |
+| yolov11l_if20_pretrain  | YOLOv11l + IF20 pretrain      |   —    |     —     | — | — | —  |    —     |     —      |   —    |    —    |
+
+---
+
+## 5 · Plots for the report
+
+```bash
+python training/plot.py                       # all plots for all runs
+python training/plot.py --run yolov11m_baseline
+```
+
+Produces:
+
+- `results/ablation_bars.png` — the four-cell comparison for §VII.
+- `results/<run>/per_class_bars.png` — horizontal bar chart of per-class mAP@50.
+- `results/<run>/training_curves.png` — loss + mAP across epochs.
+
+All plots are 180 DPI PNGs, sized to drop straight into IEEEtran
+`\includegraphics[width=\linewidth]{...}`.
+
+---
+
+## 6 · Export for the backend
+
+The backend (`backend/app.py`) loads a YOLO checkpoint and serves
+`POST /detect`. Replace the currently-served Hugging Face checkpoint
+with your freshly-trained one:
+
+```bash
+cp results/yolov11m_if20_pretrain/weights/best.pt backend/best.pt
+```
+
+For browser-side inference, also export to ONNX:
+
+```bash
+python -c "from ultralytics import YOLO; YOLO('results/yolov11m_if20_pretrain/weights/best.pt').export(format='onnx', opset=12, dynamic=False)"
+```
+
+---
+
+## What lands in the paper
+
+Four claims this pipeline is set up to defend:
+
+1. **Fridge-interior dataset is a real contribution.** Existing Indian
+   food datasets (FoodNet 2017, IndianFood10 2022, IndianFoodNet 2023)
+   are all *plated* meals. AHAAR-Fridge is ingredient-level and
+   fridge-interior — the data.yaml class list reflects this.
+2. **Two-stage transfer helps.** The baseline cells (1, 2) vs the
+   pretrained cells (3, 4) isolate the effect of IndianFood20
+   stage-1 pretraining on final mAP.
+3. **Backbone scale matters, but not linearly.** Cells 3 vs 4 isolate
+   the YOLOv11m → YOLOv11l jump at the same data budget.
+4. **Latency is honest.** The reported ms/image comes from a measured
+   median over 300 warm runs, not a marketing number.
