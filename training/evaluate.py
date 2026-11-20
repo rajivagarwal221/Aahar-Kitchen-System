@@ -66,6 +66,13 @@ def main() -> None:
 
     run_dir = RESULTS / args.run
     weights = args.weights or (run_dir / "weights/best.pt")
+    # Resolve relative --weights (e.g. "runs/detect/results/...") so every
+    # downstream path manipulation works, and so metrics.json lands next
+    # to the actual weights file.
+    if weights:
+        weights = weights.resolve()
+    if args.weights is not None:
+        run_dir = weights.parent.parent
     if not weights.exists() and args.weights is None:
         # Weights can land in two off-path locations:
         #   1. ultralytics renames collisions as <name>2, <name>3, ...
@@ -121,10 +128,18 @@ def main() -> None:
         if torch.cuda.is_available():
             latency["cuda_ms_per_image"] = round(measure_latency(model, "cuda:0"), 2)
 
+    # Record paths relative to ROOT when they're inside it; otherwise as-is.
+    def _rel(p: Path) -> str:
+        p = p.resolve()
+        try:
+            return str(p.relative_to(ROOT))
+        except ValueError:
+            return str(p)
+
     metrics = {
         "run": args.run,
-        "weights": str(weights.relative_to(ROOT)),
-        "data": str(args.data.relative_to(ROOT)),
+        "weights": _rel(weights),
+        "data": _rel(args.data),
         "map50": round(float(box.map50), 4),
         "map50_95": round(float(box.map), 4),
         "precision": round(float(box.mp), 4),

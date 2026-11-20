@@ -29,6 +29,24 @@ except ImportError as e:  # pragma: no cover
 
 ROOT = Path(__file__).resolve().parents[1]
 RESULTS = ROOT / "results"
+LEGACY_RESULTS = ROOT / "runs/detect/results"
+
+
+def find_run_dir(run: str) -> Path:
+    """Locate a run directory under either results/ or the ultralytics
+    runs/detect/results/ fallback. Returns the newest matching one, or
+    just RESULTS / run if nothing exists yet."""
+    candidates: list[Path] = []
+    for root in (RESULTS, LEGACY_RESULTS):
+        if not root.exists():
+            continue
+        for p in root.iterdir():
+            if p.is_dir() and (p.name == run or p.name.startswith(f"{run}-") or p.name.startswith(f"{run}2") or p.name.startswith(f"{run}3")):
+                candidates.append(p)
+    if candidates:
+        candidates.sort(key=lambda p: p.stat().st_mtime)
+        return candidates[-1]
+    return RESULTS / run
 
 
 def read_rows(csv_path: Path) -> list[dict]:
@@ -68,7 +86,8 @@ def plot_ablation_bars() -> None:
 
 
 def plot_per_class_bars(run: str) -> None:
-    src = RESULTS / run / "metrics.json"
+    run_dir = find_run_dir(run)
+    src = run_dir / "metrics.json"
     if not src.exists():
         print(f"[plot.py] {src} not found; run training/evaluate.py --run {run} first.")
         return
@@ -88,14 +107,15 @@ def plot_per_class_bars(run: str) -> None:
         ax.text(v + 0.01, i, f"{v:.2f}", va="center", fontsize=8, color="#555")
     ax.grid(axis="x", linestyle="--", alpha=0.3)
     fig.tight_layout()
-    out = RESULTS / run / "per_class_bars.png"
+    out = run_dir / "per_class_bars.png"
     fig.savefig(out, dpi=180)
     plt.close(fig)
     print(f"[plot.py] wrote {out}")
 
 
 def plot_training_curves(run: str) -> None:
-    src = RESULTS / run / "results.csv"
+    run_dir = find_run_dir(run)
+    src = run_dir / "results.csv"
     if not src.exists():
         print(f"[plot.py] {src} not found; nothing to plot.")
         return
@@ -128,7 +148,7 @@ def plot_training_curves(run: str) -> None:
 
     fig.suptitle(f"Training curves — {run}")
     fig.tight_layout()
-    out = RESULTS / run / "training_curves.png"
+    out = run_dir / "training_curves.png"
     fig.savefig(out, dpi=180)
     plt.close(fig)
     print(f"[plot.py] wrote {out}")
