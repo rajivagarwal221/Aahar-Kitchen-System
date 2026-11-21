@@ -4,7 +4,7 @@
 
 run_id: yolov11l_if20_pretrain
 model: results/yolov11l_if20pretrain_stage1/weights/best.pt
-data:  datasets/ahaar-fridge.yaml
+data:  datasets/indianfood20.yaml
 imgsz: 640
 epochs: 50
 batch: 8

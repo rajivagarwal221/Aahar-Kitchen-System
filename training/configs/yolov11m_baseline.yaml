@@ -2,7 +2,7 @@
 
 run_id: yolov11m_baseline
 model: yolo11m.pt
-data:  datasets/ahaar-fridge.yaml
+data:  datasets/indianfood20.yaml
 imgsz: 640
 epochs: 50
 batch: 16
