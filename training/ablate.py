@@ -187,7 +187,13 @@ def main() -> None:
                     help="Skip dataset validation (not recommended).")
     ap.add_argument("--only", nargs="*", default=[],
                     help="Run only these step names (e.g. --only yolov11m_baseline).")
+    ap.add_argument("--aggregate-only", action="store_true",
+                    help="Rebuild results/ablation.csv from existing metrics.json files and exit.")
     args = ap.parse_args()
+
+    if args.aggregate_only:
+        aggregate()
+        return
 
     plan: list[dict] = []
     for step in STEPS:
@@ -204,6 +210,10 @@ def main() -> None:
 
     if not plan:
         print("[ablate] nothing to do — every requested cell already has a best.pt.")
+        # Still rebuild ablation.csv from whatever metrics.json files exist on
+        # disk, so running evaluate.py manually and then ablate.py updates
+        # the summary without any extra flags.
+        aggregate()
         return
 
     # Preflight: validate every data config BEFORE training starts, so we fail
