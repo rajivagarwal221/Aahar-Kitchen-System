@@ -76,6 +76,11 @@ def main() -> None:
                     help="Skip the zero-tensor forward pass.")
     ap.add_argument("--allow-smoke", action="store_true",
                     help="Allow promoting weights trained on the smoke dataset.")
+    ap.add_argument("--as", dest="slot", choices=["ingredients", "dishes", "auto"],
+                    default="auto",
+                    help="Which backend slot to promote into. 'auto' (default) "
+                         "inspects the run's args.yaml: trained on indianfood20 "
+                         "-> dishes; anything else -> ingredients.")
     args = ap.parse_args()
 
     if not args.run and not args.weights:
@@ -112,16 +117,33 @@ def main() -> None:
         print(f"[promote.py] note: smoke marker present but weights trained on "
               f"{Path(data_rel).name if data_rel else 'unknown dataset'} (not ahaar-fridge). Proceeding.")
 
+    # Decide the slot (ingredients vs dishes).
+    slot = args.slot
+    if slot == "auto":
+        slot = "ingredients"  # safe default
+        args_yaml_src = src.parent.parent / "args.yaml"
+        if args_yaml_src.exists():
+            try:
+                tcfg = yaml.safe_load(args_yaml_src.read_text(encoding="utf-8")) or {}
+                data_rel = str(tcfg.get("data", "")).lower()
+                if "indianfood20" in data_rel:
+                    slot = "dishes"
+            except Exception:
+                pass
+        print(f"[promote.py] slot auto-detected: {slot}")
+
+    filename = "best.pt" if slot == "ingredients" else "best_dishes.pt"
+
     # Copy with a backup so rollback is cheap.
     BACKEND.mkdir(parents=True, exist_ok=True)
-    dst = BACKEND / "best.pt"
+    dst = BACKEND / filename
     if dst.exists():
         bak = dst.with_suffix(".pt.bak")
         shutil.copy2(dst, bak)
-        print(f"[promote.py] backed up previous backend/best.pt -> {bak.name}")
+        print(f"[promote.py] backed up previous {dst.name} -> {bak.name}")
     shutil.copy2(src, dst)
     size_mb = dst.stat().st_size / (1024 * 1024)
-    print(f"[promote.py] copied {src} ({size_mb:.1f} MB) -> {dst}")
+    print(f"[promote.py] copied {src} ({size_mb:.1f} MB) -> {dst} (slot={slot})")
 
     model = YOLO(str(dst))
     names = model.names if isinstance(model.names, dict) else {i: n for i, n in enumerate(model.names)}
@@ -148,7 +170,8 @@ def main() -> None:
             exported = model.export(format="onnx", opset=12, dynamic=False, simplify=True)
             onnx_path = str(exported)
             # YOLO.export writes next to the .pt; move it into backend/ for a tidy layout.
-            final = BACKEND / "best.onnx"
+            onnx_name = "best.onnx" if slot == "ingredients" else "best_dishes.onnx"
+            final = BACKEND / onnx_name
             try:
                 shutil.move(exported, final)
                 onnx_path = str(final)
@@ -160,6 +183,7 @@ def main() -> None:
 
     record = {
         "run": args.run or "",
+        "slot": slot,
         "source": str(src),
         "destination": str(dst),
         "onnx": onnx_path,
@@ -169,8 +193,11 @@ def main() -> None:
         "allow_smoke": bool(args.allow_smoke),
         "promoted_at": datetime.now().isoformat(timespec="seconds"),
     }
-    (BACKEND / ".promoted.json").write_text(json.dumps(record, indent=2), encoding="utf-8")
-    print(f"[promote.py] wrote {BACKEND / '.promoted.json'}")
+    # One record file per slot so promoting ingredients doesn't overwrite the
+    # dishes record and vice versa.
+    record_path = BACKEND / f".promoted_{slot}.json"
+    record_path.write_text(json.dumps(record, indent=2), encoding="utf-8")
+    print(f"[promote.py] wrote {record_path}")
 
     # Sanity check: current frontend expects a specific class count. Flag drift.
     class_names_file = ROOT / "src/lib/classNames.ts"
