@@ -31,6 +31,7 @@ from pathlib import Path
 
 try:
     import numpy as np
+    import yaml
     from ultralytics import YOLO
 except ImportError as e:  # pragma: no cover
     print(f"[promote.py] missing dependency: {e}", file=sys.stderr)
@@ -88,12 +89,28 @@ def main() -> None:
 
     marker = ROOT / "data/images/train/.AHAAR_SMOKE_MARKER"
     if marker.exists() and not args.allow_smoke:
-        raise SystemExit(
-            "[promote.py] refuse to promote: data/images/train still holds smoke-test\n"
-            "    data (see .AHAAR_SMOKE_MARKER). This weights file was likely trained\n"
-            "    on flat-colour rectangles, not a real dataset. If you really mean to\n"
-            "    ship a demo model, re-run with --allow-smoke."
-        )
+        # Only block if the weights were ACTUALLY trained on the smoke
+        # dataset (i.e. on ahaar-fridge.yaml). Models trained against
+        # IF20 or another dataset are unaffected by the marker.
+        args_yaml = src.parent.parent / "args.yaml"
+        trained_on_smoke = True  # conservative default when origin is unknown
+        if args_yaml.exists():
+            try:
+                tcfg = yaml.safe_load(args_yaml.read_text(encoding="utf-8")) or {}
+                data_rel = str(tcfg.get("data", ""))
+                trained_on_smoke = "ahaar-fridge" in data_rel.lower()
+            except Exception:
+                pass  # fall through to the conservative block below
+        if trained_on_smoke:
+            raise SystemExit(
+                "[promote.py] refuse to promote: data/images/train still holds smoke-test\n"
+                "    data (see .AHAAR_SMOKE_MARKER) AND this weights file was trained on\n"
+                "    ahaar-fridge.yaml, so it was almost certainly trained on flat-colour\n"
+                "    rectangles. If you really mean to ship a demo model, re-run with\n"
+                "    --allow-smoke."
+            )
+        print(f"[promote.py] note: smoke marker present but weights trained on "
+              f"{Path(data_rel).name if data_rel else 'unknown dataset'} (not ahaar-fridge). Proceeding.")
 
     # Copy with a backup so rollback is cheap.
     BACKEND.mkdir(parents=True, exist_ok=True)
