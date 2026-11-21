@@ -20,8 +20,27 @@ runs/
 *.pt
 *.onnx
 *.tflite
+*.hdf5
+*.h5
 !data/images/**/.gitkeep
 # Smoke-test tripwire written by datasets/scripts/make_smoke_dataset.py
 # is intentionally local-only — never commit it.
 data/images/**/.AHAAR_SMOKE_MARKER
 !data/labels/**/.gitkeep
+
+# Fetched raw datasets — gigabytes, reproducible from fetch scripts.
+# Never commit. Preserve the directory with a .gitkeep so the layout
+# ships, but every actual dataset payload stays local.
+datasets/raw/**
+!datasets/raw/.gitkeep
+!datasets/raw/*/
+!datasets/raw/**/.gitkeep
+
+# Training outputs — results dirs, metrics, and any ultralytics fallback
+# path. Keep the results/ folder itself (via .gitkeep) so paths work.
+results/**
+!results/.gitkeep
+
+# TensorFlow/Keras checkpoint shards sometimes shipped with Kaggle
+# drops (variables.data-00000-of-00001 etc.) — also binary and huge.
+**/variables/variables.*
