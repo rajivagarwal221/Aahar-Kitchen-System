@@ -56,6 +56,34 @@ export async function detectIngredients(
   return dets;
 }
 
+/** Dish-level classification of a finished plated meal. Hits the
+ * backend's `/detect/dishes` endpoint (loaded from the IndianFood20
+ * ablation checkpoint). Returns 0 or more dishes with confidence —
+ * the first entry is the top prediction. */
+export async function classifyDish(imageSrc: string): Promise<Detection[]> {
+  const blob = await dataUrlToBlob(imageSrc);
+  const form = new FormData();
+  form.append('file', blob, 'dish.jpg');
+  const url = DETECT_URL.replace(/\/detect\/?$/, '/detect/dishes');
+  let res: Response;
+  try {
+    res = await fetch(url, { method: 'POST', body: form });
+  } catch {
+    throw new Error(
+      `Could not reach the dish classifier at ${url}. ` +
+      'Make sure the backend is running and backend/best_dishes.pt is in place.',
+    );
+  }
+  if (res.status === 503) {
+    throw new Error('The dish classifier isn\'t loaded on this backend. ' +
+      'Run `python training/promote.py --run yolov11m_if20_pretrain --allow-smoke` to install it.');
+  }
+  if (!res.ok) {
+    throw new Error(`Dish classifier returned ${res.status}.`);
+  }
+  return (await res.json()) as Detection[];
+}
+
 /** No-op in server-side mode; kept so pages that call it compile. */
 export function warmUpModel(): Promise<void> {
   return fetch(DETECT_URL.replace('/detect', '/health'))

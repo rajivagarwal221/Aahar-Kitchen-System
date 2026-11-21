@@ -4,7 +4,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { NextStep, Page, PageHeader, ease } from '../components/Page';
 import { Arrow, Back, Check, Pause, Play, Plus, Reset, Timer } from '../components/Icons';
 import { Nutrition, Recipe, rankRecipes, useRecipes } from '../lib/recipes';
-import { uid } from '../lib/quality';
+import { Detection, classifyDish } from '../lib/inference';
+import { fileToDataUrl, uid } from '../lib/quality';
 import { useKitchen } from '../lib/store';
 import { VoiceCommand, canListen, canSpeak, useVoice } from '../lib/voice';
 
@@ -94,6 +95,37 @@ function CookAlong({ recipe }: { recipe: Recipe }) {
     setLogged(true);
     window.setTimeout(() => setLogged(false), 2000);
   };
+
+  // --- Dish classifier: upload a finished-plate photo, verify against the recipe ---
+  const dishInput = useRef<HTMLInputElement | null>(null);
+  const [dishPhoto, setDishPhoto] = useState<string | null>(null);
+  const [dishBusy, setDishBusy] = useState(false);
+  const [dishError, setDishError] = useState<string | null>(null);
+  const [dishResults, setDishResults] = useState<Detection[] | null>(null);
+
+  const onDishFile = async (f: File | undefined) => {
+    if (!f) return;
+    setDishError(null);
+    setDishResults(null);
+    setDishBusy(true);
+    try {
+      const url = await fileToDataUrl(f);
+      setDishPhoto(url);
+      const res = await classifyDish(url);
+      setDishResults(res);
+    } catch (e: unknown) {
+      setDishError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setDishBusy(false);
+    }
+  };
+
+  const normalize = (s: string) => s.toLowerCase().replace(/[^a-z]+/g, '');
+  const topDish = dishResults?.[0];
+  const dishMatchesRecipe = topDish
+    ? normalize(recipe.name).includes(normalize(topDish.label)) ||
+      normalize(topDish.label).includes(normalize(recipe.name).slice(0, 8))
+    : false;
   const [step, setStep] = useState(0);
   const [left, setLeft] = useState(recipe.steps[0].seconds);
   const [running, setRunning] = useState(false);
@@ -427,6 +459,94 @@ function CookAlong({ recipe }: { recipe: Recipe }) {
         >
           {logged ? <><Check width={16} /> Logged</> : <><Plus width={16} /> Log this meal</>}
         </button>
+      </section>
+
+      <section className="card p-5 md:p-6 mt-6">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <p className="kicker text-leaf">Finished-plate check</p>
+            <h2 className="font-display text-xl mt-0.5">Did it turn out like {recipe.name}?</h2>
+            <p className="mt-1 text-[0.82rem] text-muted max-w-[60ch]">
+              Snap a photo of the plate you just made and AHAAR checks against its 20-class
+              Indian-cuisine model. Useful for leftovers, cook-along confidence, or just to
+              confirm the camera saw what you cooked.
+            </p>
+          </div>
+          <div>
+            <input
+              ref={dishInput}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={(e) => onDishFile(e.target.files?.[0] || undefined)}
+            />
+            <button
+              className={dishBusy ? 'btn-ghost' : 'btn-accent'}
+              disabled={dishBusy}
+              onClick={() => dishInput.current?.click()}
+            >
+              {dishBusy ? 'Classifying…' : (dishPhoto ? 'Try another photo' : 'Upload or take a photo')}
+            </button>
+          </div>
+        </div>
+
+        {dishError && (
+          <p role="alert" className="mt-3 text-[0.88rem] text-chilli">{dishError}</p>
+        )}
+
+        {dishPhoto && (
+          <div className="mt-4 grid md:grid-cols-[1.1fr_1.4fr] gap-4 items-start">
+            <img
+              src={dishPhoto}
+              alt="Your finished plate"
+              className="w-full rounded-xl border border-ink/10 bg-surface max-h-72 object-contain"
+            />
+            <div>
+              {topDish ? (
+                <>
+                  <div className={`rounded-xl p-4 border ${dishMatchesRecipe ? 'border-leaf/40 bg-leaf/5' : 'border-turmeric/40 bg-turmeric/5'}`}>
+                    <p className="kicker" style={{ color: dishMatchesRecipe ? '#3F6B3A' : '#A06A20' }}>
+                      {dishMatchesRecipe ? 'Looks like a match' : 'Different dish'}
+                    </p>
+                    <p className="font-display text-xl mt-0.5 leading-tight">
+                      AHAAR sees: <span className="text-leaf">{topDish.label}</span>
+                    </p>
+                    <p className="mt-1 text-[0.82rem] text-muted tabular-nums">
+                      confidence {Math.round(topDish.confidence * 100)}%
+                      {!dishMatchesRecipe && (
+                        <> · expected <em>{recipe.name}</em></>
+                      )}
+                    </p>
+                  </div>
+
+                  {dishResults && dishResults.length > 1 && (
+                    <div className="mt-3">
+                      <p className="text-[0.75rem] uppercase tracking-wider text-muted font-semibold">Other possibilities</p>
+                      <ul className="mt-1 space-y-1 text-[0.85rem]">
+                        {dishResults.slice(1, 4).map((d) => (
+                          <li key={d.id} className="flex justify-between">
+                            <span>{d.label}</span>
+                            <span className="text-muted tabular-nums">{Math.round(d.confidence * 100)}%</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p className="text-[0.88rem] text-muted">
+                  The classifier didn&apos;t find a confident Indian-dish match. Try a sharper, closer shot of the plate.
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        <p className="mt-3 text-[0.72rem] text-muted">
+          Uses the YOLOv11m + IndianFood20 model from the §VI ablation. 20 plated-dish classes;
+          raw ingredients (e.g. a bowl of chopped onions) won&apos;t register.
+        </p>
       </section>
 
       <NextStep to="/health" label="Family health log" hint="Log blood pressure and heart rate after the meal." />
