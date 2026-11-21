@@ -58,8 +58,8 @@ def main() -> None:
                     help="Run name, e.g. 'yolov11m_baseline' — matches the ultralytics project dir.")
     ap.add_argument("--weights", type=Path, default=None,
                     help="Optional explicit weights path. Defaults to results/<run>/weights/best.pt.")
-    ap.add_argument("--data", type=Path, default=ROOT / "datasets/ahaar-fridge.yaml",
-                    help="YOLO data yaml the eval runs against (same as training by default).")
+    ap.add_argument("--data", type=Path, default=None,
+                    help="YOLO data yaml the eval runs against. Defaults to whatever the model was trained on (read from the run's args.yaml).")
     ap.add_argument("--no-latency", action="store_true",
                     help="Skip latency measurement (useful on CI without GPU).")
     args = ap.parse_args()
@@ -93,8 +93,29 @@ def main() -> None:
     if not weights.exists():
         raise SystemExit(f"[evaluate.py] weights not found: {weights}")
 
+    # Auto-pick --data from the training args.yaml ultralytics writes next
+    # to the weights, so eval always runs against the SAME dataset the
+    # model was trained on. This avoids the 0.0-mAP gotcha where the
+    # default fridge data config doesn't match an IF20-trained model.
+    data_path: Path | None = args.data
+    if data_path is None:
+        args_yaml = run_dir / "args.yaml"
+        if args_yaml.exists():
+            with args_yaml.open(encoding="utf-8") as fh:
+                targs = yaml.safe_load(fh) or {}
+            d = targs.get("data")
+            if d:
+                dp = Path(d)
+                data_path = dp if dp.is_absolute() else (ROOT / dp).resolve()
+                print(f"[evaluate.py] data auto-detected from {args_yaml.name}: {data_path}")
+        if data_path is None:
+            data_path = ROOT / "datasets/ahaar-fridge.yaml"
+            print(f"[evaluate.py] no training args.yaml found; falling back to {data_path}")
+    if not data_path.exists():
+        raise SystemExit(f"[evaluate.py] data yaml not found: {data_path}")
+
     model = YOLO(str(weights))
-    val = model.val(data=str(args.data), split="val", verbose=False, plots=True)
+    val = model.val(data=str(data_path), split="val", verbose=False, plots=True)
 
     # Ultralytics stores per-class results on `val.box`.
     names = model.names if isinstance(model.names, dict) else {i: n for i, n in enumerate(model.names)}
@@ -139,7 +160,7 @@ def main() -> None:
     metrics = {
         "run": args.run,
         "weights": _rel(weights),
-        "data": _rel(args.data),
+        "data": _rel(data_path),
         "map50": round(float(box.map50), 4),
         "map50_95": round(float(box.map), 4),
         "precision": round(float(box.mp), 4),
