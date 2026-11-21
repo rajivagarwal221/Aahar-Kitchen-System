@@ -301,20 +301,30 @@ serving).
 \end{itemize}
 
 \subsection{Inference Backend}
-A $\sim$90-line FastAPI service (\texttt{backend/app.py}) loads a
-YOLOv11m checkpoint at startup, warms it with one zero-tensor
-forward pass, and exposes two endpoints:
+A $\sim$150-line FastAPI service (\texttt{backend/app.py}) loads
+\emph{two} YOLO checkpoints at startup, warms each with a zero-tensor
+forward pass, and exposes the following endpoints:
 \begin{itemize}
-  \item \texttt{POST /detect} -- multipart image upload $\rightarrow$
-        JSON array of detected ingredients
-        (\texttt{\{classId, className, label, confidence, box\}}).
-  \item \texttt{GET /health} -- liveness probe reporting the number
-        of classes the loaded model supports (107).
+  \item \texttt{POST /detect} (also \texttt{/detect/ingredients}) --
+        multipart image upload $\rightarrow$ JSON array of ingredient
+        detections (\texttt{\{classId, className, label, confidence,
+        box\}}). Uses the 107-class production detector.
+  \item \texttt{POST /detect/dishes} (or
+        \texttt{POST /detect?model=dishes}) -- same request contract,
+        routed to the 20-class IF20 plated-dish classifier produced by
+        the winning ablation cell (\S\ref{sec:training}).
+  \item \texttt{GET /health} -- liveness probe reporting both models'
+        loaded state and class counts.
 \end{itemize}
-A client-side display-name map translates the 107 raw class keys
-(e.g.\ \texttt{toor\_dal}, \texttt{methi\_leaves}) into friendly
-English labels (``Toor dal'', ``Methi (fenugreek) leaves'') for the
-UI.
+A client-side display-name map translates the 107 raw ingredient
+class keys (e.g.\ \texttt{toor\_dal}, \texttt{methi\_leaves}) into
+friendly English labels (``Toor dal'', ``Methi (fenugreek) leaves'')
+for the UI. Each model slot has independent environment-variable
+resolution (\texttt{MODEL\_PATH\_INGREDIENTS} / \texttt{MODEL\_URL\_INGREDIENTS}
+and \texttt{MODEL\_PATH\_DISHES} / \texttt{MODEL\_URL\_DISHES}) so
+upgrading one doesn't disturb the other, and the dishes slot is
+optional: missing it just makes the dishes endpoint return 503 with a
+remediation message, not a startup failure.
 
 \subsection{Data Assets}
 \begin{itemize}
@@ -419,7 +429,12 @@ route. Every row is backed by code on \texttt{main}, not a mockup.
                                  card; a Meal-Log card recording
                                  \texttt{\{memberId, recipeId, servings,
                                  ts, nutrition\}} into the store so the
-                                 CGM pairing can use it. \\
+                                 CGM pairing can use it; a
+                                 \textit{Finished-plate check} card
+                                 that posts a photo of the cooked plate
+                                 to \texttt{/detect/dishes} and
+                                 compares the top prediction to the
+                                 recipe being cooked. \\
 \texttt{/health}  & Health       & Logs BP + HR readings with an ACC/AHA
                                  category; accepts a CGM CSV (LibreView
                                  or Dexcom) and renders the ADA 2020
@@ -566,7 +581,7 @@ config; all other hyperparameters are identical.
 \subsection{Ablation Design}
 
 \begin{table}[!t]
-\caption{Four-cell ablation on AHAAR-Fridge val split.}
+\caption{Four-cell ablation design.}
 \label{tab:ablation-design}
 \centering
 \footnotesize
@@ -582,6 +597,49 @@ YOLOv11l + IF20    & \texttt{yolov11l\_if20\_pretrain.yaml}  & Test backbone sca
 \end{tabularx}
 \end{table}
 
+\subsection{Scope caveat}
+
+The four-cell ablation reported below was executed on the
+IndianFood20 (IF20) plated-dish dataset of
+\cite{indianfood10}. AHAAR-Fridge, the fridge-interior ingredient
+dataset we scope in \S\ref{sec:methodology}A, is not yet captured;
+it is the natural next experimental step. The three cells that
+originally pointed at \texttt{datasets/ahaar-fridge.yaml} were
+retargeted to \texttt{datasets/indianfood20.yaml} so the ablation
+could complete within the project's timeline. Two consequences follow:
+
+\begin{enumerate}
+  \item Because IF20 is distributed as folders of whole dish images
+        and \texttt{datasets/scripts/\_prepare\_indianfood20.py}
+        emits one centred, 95\%-of-frame bounding box per image, the
+        resulting labels are \emph{classification-grade}: each image
+        carries a single ground-truth class spanning almost the whole
+        frame. The mAP numbers in
+        Table~\ref{tab:ablation-results} therefore reflect the
+        detector's ability to agree with image-level labels, not its
+        ability to localise ingredients in cluttered fridge
+        interiors. The 0.99 range is consistent with that framing;
+        comparable detection numbers on ingredient-level
+        AHAAR-Fridge annotations will be lower and are deferred to
+        future work.
+  \item The production detector served to the AHAAR frontend in
+        \S\ref{sec:architecture} is a separate, larger model
+        trained prior to this study on the merged fruit-vegetable
+        (Kaggle \texttt{kritikseth/fruit-and-vegetable-image-recognition}),
+        Indian spices (Kaggle \texttt{tankitrathaur/indian-spices-images-data})
+        and in-house scraped-ingredient datasets, totalling 107
+        pantry classes. Quantitative evaluation of that model
+        against a held-out ingredient-level benchmark is also
+        deferred.
+\end{enumerate}
+
+With these caveats, the IF20 ablation supplies three defensible
+observations: whether two-stage transfer through a culturally-matched
+source improves modern-backbone performance on Indian-food targets,
+whether backbone scale (v11m vs v11l) matters at this data budget,
+and how latency and parameter count trade off across the four
+configurations.
+
 \subsection{Metrics}
 
 \texttt{training/evaluate.py} emits a \texttt{metrics.json} per run
@@ -595,19 +653,87 @@ containing:
   \item Parameter count (M) and weights size (MB).
 \end{itemize}
 After every cell, \texttt{ablate.py} re-aggregates these into a
-single \texttt{results/ablation.csv} which is the table this report
-cites.
+single \texttt{results/ablation.csv} which is the source for
+Table~\ref{tab:ablation-results}.
+
+\subsection{Results}
+
+Table~\ref{tab:ablation-results} reports the measured values from the
+three evaluated cells, run on the IF20 val split as described in the
+scope caveat above. All three cells use the same optimiser (AdamW,
+auto), image size (640), batch size (16 for m-sized backbones, 8 for
+l-sized), and seed (42). The yolov8m\_baseline cell is omitted from
+the table because its training was retargeted to the pipeline-smoke
+dataset earlier in the project and was not rerun against IF20.
+
+\begin{table}[!t]
+\caption{IF20 val-split ablation results. P = precision, R = recall.
+Latency is median ms/image over 300 timed inferences on a CUDA
+GeForce RTX~3050 6GB.}
+\label{tab:ablation-results}
+\centering
+\footnotesize
+\begin{tabular}{lrrrrrrr}
+\toprule
+\textbf{Run} & \textbf{mAP@50} & \textbf{mAP@50:95} & \textbf{P} & \textbf{R} & \textbf{F1} & \textbf{Params} & \textbf{Latency} \\
+             &                 &                    &            &            &             & \textbf{(M)}    & \textbf{(ms)}    \\
+\midrule
+YOLOv11m (baseline)      & 0.978 & 0.974 & 0.944 & 0.959 & 0.951 & 20.1 & 25.5 \\
+YOLOv11m + IF20 pretrain & \textbf{0.991} & 0.985 & \textbf{0.977} & \textbf{0.983} & \textbf{0.980} & 20.1 & 24.8 \\
+YOLOv11l + IF20 pretrain & 0.991 & \textbf{0.985} & 0.974 & 0.957 & 0.965 & 25.3 & 32.9 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Three observations follow. First, two-stage transfer through IF20
+yields the best overall result at the m-sized backbone: adding the
+IF20 pretrain step lifts F1 from 0.951 to 0.980 and precision from
+0.944 to 0.977 at essentially no latency cost (24.8~ms vs 25.5~ms).
+Second, scaling the backbone from v11m to v11l does not improve
+mAP\mbox{@}50:95 at this data budget (0.985 for both, with the m-size
+winning on P/R/F1); the larger model is 32\% slower per image, which
+makes v11m+IF20 the Pareto-dominant choice for AHAAR's RTX-3050 serving
+target. Third, all three numbers sit in the 0.95--0.99 range, which
+the scope caveat predicts: the IF20 labels are whole-image proxies and
+agreement with those labels is classification-grade. We report the
+values honestly without claiming they reflect fine-grained
+ingredient-level detection accuracy.
 
 \subsection{Figures}
 
 \texttt{training/plot.py} generates three figures at 180\,DPI that
 drop straight into IEEEtran \texttt{\textbackslash{}includegraphics}:
-\textbf{(i)} \texttt{results/ablation\_bars.png} -- the four-cell
-mAP@50 / mAP@50:95 / F1 comparison;
-\textbf{(ii)} \texttt{results/\textit{run}/per\_class\_bars.png} --
-per-class mAP@50 sorted descending, labelled with each value;
-\textbf{(iii)} \texttt{results/\textit{run}/training\_curves.png} --
-loss + mAP across epochs from \texttt{results.csv}.
+\textbf{(i)} the four-cell bar chart comparison,
+\textbf{(ii)} per-class mAP@50 sorted descending for the winning cell,
+and
+\textbf{(iii)} loss + mAP across epochs.
+Figures~\ref{fig:ablation-bars}, \ref{fig:per-class} and \ref{fig:curves}
+embed the outputs for the winning YOLOv11m + IF20 cell.
+
+\begin{figure}[!t]
+\centering
+\includegraphics[width=0.96\linewidth]{figures/ablation_bars.png}
+\caption{Four-cell ablation bar chart. mAP@50, mAP@50:95, F1 per run.
+YOLOv11m + IF20 pretrain is the Pareto-dominant configuration.}
+\label{fig:ablation-bars}
+\end{figure}
+
+\begin{figure}[!t]
+\centering
+\includegraphics[width=0.96\linewidth]{figures/ahaar_per_class_bars.png}
+\caption{Per-class mAP@50 on the IF20 val split for the winning
+YOLOv11m + IF20 pretrain cell, sorted descending. Twenty classes.}
+\label{fig:per-class}
+\end{figure}
+
+\begin{figure}[!t]
+\centering
+\includegraphics[width=0.96\linewidth]{figures/ahaar_training_curves.png}
+\caption{Training curves for the winning cell. Left: box loss on
+train and val splits across 50 epochs. Right: mAP@50 and mAP@50:95
+on the val split.}
+\label{fig:curves}
+\end{figure}
 
 \begin{figure*}[!t]
 \centering
