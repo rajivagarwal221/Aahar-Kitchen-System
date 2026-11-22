@@ -75,7 +75,7 @@ def plot_ablation_bars() -> None:
     ax.set_xticklabels(labels, rotation=18, ha="right")
     ax.set_ylim(0, 1.0)
     ax.set_ylabel("Score")
-    ax.set_title("AHAAR-Fridge ablation (val split)")
+    ax.set_title("IndianFood20 ablation (val split)")
     ax.legend(loc="upper left", frameon=False)
     ax.grid(axis="y", linestyle="--", alpha=0.3)
     fig.tight_layout()

@@ -622,6 +622,14 @@ could complete within the project's timeline. Two consequences follow:
         comparable detection numbers on ingredient-level
         AHAAR-Fridge annotations will be lower and are deferred to
         future work.
+  \item Only eight of the twenty whitelisted IF20 class folders
+        were populated in the Kaggle drop used for this study, so
+        all per-class numbers in Fig.~\ref{fig:per-class} and the
+        aggregate mAP in Table~\ref{tab:ablation-results} describe
+        performance over those eight classes only. The remaining
+        twelve are listed at 0.00 because the val split contains
+        no samples for them; this is a dataset-availability
+        limitation, not a model failure.
   \item The production detector served to the AHAAR frontend in
         \S\ref{sec:architecture} is a separate, larger model
         trained prior to this study on the merged fruit-vegetable
@@ -722,7 +730,12 @@ YOLOv11m + IF20 pretrain is the Pareto-dominant configuration.}
 \centering
 \includegraphics[width=0.96\linewidth]{figures/ahaar_per_class_bars.png}
 \caption{Per-class mAP@50 on the IF20 val split for the winning
-YOLOv11m + IF20 pretrain cell, sorted descending. Twenty classes.}
+YOLOv11m + IF20 pretrain cell, sorted descending. Eight of the
+twenty whitelisted classes carried images in the Kaggle drop used
+for this study (\emph{chapati, chole\_bhature, dal\_makhani, fried\_rice,
+idli, jalebi, pav\_bhaji, samosa}); the remaining twelve are shown
+at 0.00 because they contain no val samples, and re-fetching the
+full twenty-folder split is deferred to future work.}
 \label{fig:per-class}
 \end{figure}
 
