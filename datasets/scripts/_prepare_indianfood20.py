@@ -56,13 +56,9 @@ def main() -> None:
     args = ap.parse_args()
 
     root = Path(args.root).resolve()
+    if not root.exists():
+        raise SystemExit(f"[indianfood20] FAILED: {root} does not exist. Download the dataset first.")
     out_img, out_lbl = root / "images", root / "labels"
-    for d in (out_img, out_lbl):
-        if d.exists():
-            shutil.rmtree(d)
-    for split in ("train", "val"):
-        (out_img / split).mkdir(parents=True)
-        (out_lbl / split).mkdir(parents=True)
 
     cls_to_id = {c: i for i, c in enumerate(CLASSES)}
     lookup = {normalise(c): c for c in CLASSES}
@@ -84,6 +80,24 @@ def main() -> None:
             unrecognised.append(folder.relative_to(root).as_posix())
             continue
         pooled[key].extend(images)
+
+    if not any(pooled.values()):
+        print(f"[indianfood20] folders with images under {root}:")
+        for n in unrecognised or ["(none)"]:
+            print(f"              - {n}")
+        raise SystemExit(
+            "[indianfood20] FAILED: no dish folders found, so nothing was changed.\n"
+            "The original Kaggle class folders (samosa/, idli/, ...) must be inside --root. Re-download with:\n"
+            "  kaggle datasets download -d theeyeschico/indian-food-classification "
+            f"-p {root} --unzip")
+
+    # Only now is it safe to replace the old split.
+    for d in (out_img, out_lbl):
+        if d.exists():
+            shutil.rmtree(d)
+    for split in ("train", "val"):
+        (out_img / split).mkdir(parents=True)
+        (out_lbl / split).mkdir(parents=True)
 
     rng = random.Random(args.seed)
     counts: Counter[tuple[str, str]] = Counter()
