@@ -157,7 +157,7 @@ export default function Pantry() {
               <h2 className="font-display text-xl mt-0.5">Per typical dish your pantry can make</h2>
               <p className="text-[0.82rem] text-muted mt-1">
                 Averaged over {nutriProfile.count} matched dish{nutriProfile.count === 1 ? '' : 'es'},
-                weighted by pantry fit. Source: Indian Food Nutrition dataset (1,005 dishes).
+                weighted by pantry fit. Source: Indian Food Nutrition dataset (1,014 dishes).
               </p>
             </div>
             <span className="chip border-leaf/30 bg-leaf/10 text-leaf !text-[0.72rem]">Dish-level, per serving</span>

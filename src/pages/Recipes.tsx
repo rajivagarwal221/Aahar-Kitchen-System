@@ -405,7 +405,7 @@ function NutritionDetail({ nutrition, servings }: { nutrition?: Nutrition; servi
         })}
       </div>
       <p className="mt-2 text-[0.72rem] text-muted">
-        Source: <em>{nutrition.source}</em> · Indian Food Nutrition dataset (1,005 dishes).
+        Source: <em>{nutrition.source}</em> · Indian Food Nutrition dataset (1,014 dishes).
       </p>
     </div>
   );

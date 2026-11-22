@@ -1,7 +1,8 @@
-%% AHAAR -- Kitchen System : IEEE-style Project Report
+%% AHAAR -- Kitchen System : IEEE-style Project Report (two-column)
 %% Compile with pdflatex, then bibtex, then pdflatex x2
-%% Overleaf: upload main.tex, references.bib ; set compiler to pdfLaTeX
-\documentclass[journal,onecolumn,12pt]{IEEEtran}
+%% Overleaf: upload main.tex, references.bib and the figures/ folder;
+%% set compiler to pdfLaTeX
+\documentclass[journal]{IEEEtran}
 
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
@@ -9,22 +10,31 @@
 \usepackage{amsmath,amssymb}
 \usepackage{booktabs}
 \usepackage{array}
+\usepackage{tabularx}
 \usepackage{url}
-\usepackage{hyperref}
 \usepackage{cite}
 \usepackage{xcolor}
-\usepackage{listings}
-\usepackage{tabularx}
+\usepackage[htt]{hyphenat}   % lets \texttt{...} break across lines in narrow columns
+\usepackage{hyperref}        % keep hyperref last
 
 \hypersetup{colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue}
+\setlength{\emergencystretch}{2em}
+\graphicspath{{figures/}{./}}
 
-\lstset{
-  basicstyle=\ttfamily\footnotesize,
-  breaklines=true,
-  columns=fullflexible,
-  frame=single,
-  showstringspaces=false
-}
+% --- float tuning: let figures/tables fill pages instead of leaving gaps ---
+\renewcommand{\topfraction}{0.95}
+\renewcommand{\bottomfraction}{0.90}
+\renewcommand{\textfraction}{0.05}
+\renewcommand{\floatpagefraction}{0.75}
+\renewcommand{\dbltopfraction}{0.95}
+\renewcommand{\dblfloatpagefraction}{0.75}
+\setcounter{topnumber}{3}
+\setcounter{bottomnumber}{2}
+\setcounter{totalnumber}{6}
+\setcounter{dbltopnumber}{2}
+\setlength{\textfloatsep}{8pt plus 2pt minus 2pt}
+\setlength{\floatsep}{8pt plus 2pt minus 2pt}
+\setlength{\intextsep}{8pt plus 2pt minus 2pt}
 
 \begin{document}
 
@@ -34,9 +44,9 @@
   Rajiv Agarwal, Alan Joseph, Aryan Raina\\
   \textit{Group 19, Academic Year 2026--27}\\
   \textit{Project Guide: Ms.\ Sharlene Rebeiro}%
-  \thanks{Source code: \url{https://github.com/workspace220106/Aahar-Kitchen-System}.
-  Deployed demo: see the project page. All modules reported here are
-  implemented, under test, and live on \texttt{main}.}
+  \thanks{Source code: \url{https://github.com/rajivagarwal221/Aahar-Kitchen-System}.
+  All modules reported here are implemented, under test, and live on
+  \texttt{main}.}
 }
 
 \markboth{AHAAR Project Report, 2026--27}{Agarwal \MakeLowercase{\textit{et al.}}: AHAAR -- Kitchen System}
@@ -58,7 +68,7 @@ service and detects ingredients from a phone photograph; a 450-recipe
 index pre-built from the IndianFoodDataset drives a client-side
 scorer that combines pantry coverage with per-family-member
 condition-aware penalties; dish-level nutrition from the Indian Food
-Nutrition dataset (1{,}005 dishes) is attached to every recipe at
+Nutrition dataset (1{,}014 dishes) is attached to every recipe at
 build time; a LibreView / Dexcom CSV ingest pipeline computes the
 full ADA 2020 CGM metric suite in the browser; and a per-user
 Glycemic Sensitivity Index learned from logged meals plus CGM windows
@@ -67,9 +77,9 @@ household member. We ground every design choice in ten peer-reviewed
 IEEE papers spanning object detection, cross-modal recipe retrieval,
 nutrition-aware recommendation, portion estimation, and
 glucose-driven dietary monitoring, and describe the reproducible
-training pipeline that evaluates four ablation cells
-(YOLOv8m / YOLOv11m, with and without IndianFood20 two-stage
-transfer) on an in-house fridge-interior dataset.
+training pipeline, with a three-cell ablation (YOLOv11m and
+YOLOv11l, with and without two-stage transfer through a 20-class
+Indian food dataset).
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -79,19 +89,13 @@ progressive web application, internationalization.
 \end{IEEEkeywords}
 
 %====================================================================
-\tableofcontents
-\vspace{1em}
-\hrule
-\vspace{1em}
-
-%====================================================================
 \section{Introduction}
 \IEEEPARstart{T}{he} question \textit{``what's for dinner?''} is asked
 in roughly 300~million Indian households every day. The answer is
 constrained by what is physically in the refrigerator, by regional
 cuisine preferences, by the age and health status of each family
 member, and -- for the roughly 101~million Indians living with
-diabetes -- by the glycemic impact of the chosen meal. No existing
+diabetes~\cite{anjana2023icmr} -- by the glycemic impact of the chosen meal. No existing
 application addresses all four constraints simultaneously for Indian
 cuisine.
 
@@ -100,7 +104,7 @@ decision flow in a kitchen:
 \textit{Fridge Scan $\rightarrow$ Detection $\rightarrow$ Pantry $\rightarrow$ Recipes $\rightarrow$ Family Portions $\rightarrow$ Weekly Plan $\rightarrow$ Cook-along $\rightarrow$ Health}.
 Each page is backed by real data and real inference: the detector is
 a trained YOLOv11m served from a FastAPI backend; the pantry page
-drives an aggregated nutrition profile from the 1{,}005-dish Indian
+drives an aggregated nutrition profile from the 1{,}014-dish Indian
 Food Nutrition dataset; the health page ingests a Continuous Glucose
 Monitor export (Abbott LibreView or Dexcom Clarity) and computes the
 ADA~2020 CGM metric suite; and the recipe ranker learns a per-member
@@ -111,8 +115,8 @@ This report consolidates: (i) the ten IEEE references that anchor
 each AHAAR subsystem; (ii) the implemented system architecture
 (frontend, inference backend, data assets, training pipeline);
 (iii) the proposed methodology for the primary ML contribution
-(AHAAR-Fridge dataset + two-stage transfer YOLO training with a
-four-cell ablation); (iv) the evaluation protocol that produces the
+(two-stage transfer YOLO training with a three-cell ablation, and
+the planned AHAAR-Fridge dataset); (iv) the evaluation protocol that produces the
 paper-cited metrics; and (v) a discussion of novelty, limitations,
 and future work.
 
@@ -128,7 +132,7 @@ and future work.
         formulation~\cite{salvador2019inverse}.
   \item A dish-level nutrition enrichment pipeline that attaches
         per-serving nutrition from the Indian Food Nutrition dataset
-        (1{,}005 dishes, 1{,}381 name variants) to every recipe at
+        (1{,}014 dishes, 1{,}381 name variants) to every recipe at
         build time, driving the Pantry nutrition profile, Family
         portion totals, Recipes cards, Cook-along nutrition panel,
         and Health advice. 355 of 450 recipes (79\%) carry a
@@ -238,18 +242,19 @@ logged meals is the member's \textit{Glycemic Sensitivity Index}
 Table~\ref{tab:papermap} summarises how each paper maps to a
 component of the implemented AHAAR system.
 
-\begin{table}[!t]
+\begin{table}[!tb]
 \caption{Mapping of IEEE references to implemented AHAAR components.}
 \label{tab:papermap}
 \centering
-\footnotesize
-\begin{tabularx}{\linewidth}{l l X}
+\scriptsize
+\setlength{\tabcolsep}{3pt}
+\begin{tabularx}{\columnwidth}{l l X}
 \toprule
 \textbf{Ref.} & \textbf{Venue} & \textbf{AHAAR component} \\
 \midrule
 \cite{redmon2016yolo}        & CVPR 2016        & YOLOv11m detector in \texttt{/scan}, \texttt{/detect} \\
 \cite{foodnet2017}           & IEEE SPL 2017    & Baseline for Indian-food backbone comparisons \\
-\cite{indianfood10}          & IEEE ICDEW 2022  & IndianFood20 stage-1 pretrain target \\
+\cite{indianfood10}          & IEEE ICDEW 2022  & Indian plated-food detection baseline (91.8\% mAP) \\
 \cite{yolov11indian2025}     & IEEE CICN 2025   & Detection $\rightarrow$ nutrition pipeline template \\
 \cite{salvador2017im2recipe} & IEEE CVPR 2017   & Recipe retrieval (upgrade path for \texttt{/recipes}) \\
 \cite{marin2021recipe1m}     & IEEE TPAMI 2021  & Recipe1M+ scale reference \\
@@ -269,7 +274,22 @@ AHAAR ships as a React~18 single-page application packaged as an
 installable Progressive Web App, backed by a FastAPI inference
 service. The entire system is deployable from one repository and runs
 on consumer hardware (an RTX~3050 is sufficient for both training and
-serving).
+serving). Fig.~\ref{fig:flow} shows the end-to-end data flow.
+
+\begin{figure*}[!t]
+\centering
+\includegraphics[width=0.9\textwidth]{figures/system_flow.png}
+\caption{AHAAR end-to-end data flow. UI pages (cream), models
+(green), data assets (amber), and output metrics (terracotta).
+Solid arrows are mandatory data paths; dashed arrows are optional
+(Lazy Mode skips the pantry edit; recipe nutrition is attached at
+build time from the Indian Food Nutrition CSV; GSI feeds back into
+the ranker as per-member impact chips). The single external
+runtime dependency is the FastAPI inference server, which fits on
+an RTX~3050 and can be substituted by the browser-ONNX pipeline
+documented in \texttt{training/README.md} \S6.}
+\label{fig:flow}
+\end{figure*}
 
 \subsection{Frontend}
 \begin{itemize}
@@ -301,7 +321,7 @@ serving).
 \end{itemize}
 
 \subsection{Inference Backend}
-A $\sim$150-line FastAPI service (\texttt{backend/app.py}) loads
+A $\sim$300-line FastAPI service (\texttt{backend/app.py}) loads
 \emph{two} YOLO checkpoints at startup, warms each with a zero-tensor
 forward pass, and exposes the following endpoints:
 \begin{itemize}
@@ -311,7 +331,7 @@ forward pass, and exposes the following endpoints:
         box\}}). Uses the 107-class production detector.
   \item \texttt{POST /detect/dishes} (or
         \texttt{POST /detect?model=dishes}) -- same request contract,
-        routed to the 20-class IF20 plated-dish classifier produced by
+        routed to the 20-class IF20 dish classifier produced by
         the winning ablation cell (\S\ref{sec:training}).
   \item \texttt{GET /health} -- liveness probe reporting both models'
         loaded state and class counts.
@@ -337,7 +357,7 @@ remediation message, not a startup failure.
         caps the output at 450 recipes ranked by detector coverage.
         79\% of the output recipes also carry a dish-level nutrition
         row matched from \texttt{Indian\_Food\_Nutrition\_Processed.csv}
-        (1{,}005 dishes, 1{,}381 variants).
+        (1{,}014 dishes, 1{,}381 variants).
   \item \textbf{Class manifest}:
         \texttt{datasets/processed/class\_manifest.json} enumerates
         1{,}349 canonical Indian ingredient synonyms used by the
@@ -355,46 +375,46 @@ remediation message, not a startup failure.
         + macronutrient composition) from PhysioNet.
 \end{itemize}
 
-Fig.~\ref{fig:datasets} summarises the two data assets the
-recommender runs on. The recipe index is predominantly vegetarian
-(375 of 450) and spans regional cuisines rather than a single
-``Indian'' bucket; median total cook time is 40 minutes, which is why
-the \emph{Quick} filter and the per-slot time budget on
-\texttt{/plan} matter in practice.
+Fig.~\ref{fig:datasets} summarises the recipe index and the
+nutrition dataset. The index is predominantly vegetarian (375 of
+450), spans regional cuisines, and has a median total cook time of
+40~minutes.
 
-\begin{figure}[!htbp]
+\begin{figure}[!tb]
 \centering
-\includegraphics[width=0.92\linewidth]{figures/dataset_overview.png}
-\caption{Data assets. (a)--(c) The 450-recipe index served in
-\texttt{public/recipes.json}: cuisine, diet label and total cook time.
-(d) Per-serving calories against protein for the 1{,}014 rows of
-\texttt{Indian\_Food\_Nutrition\_Processed.csv} used for dish-level
-nutrition enrichment.}
+\includegraphics[width=\columnwidth]{figures/dataset_overview.png}
+\caption{Data assets. (a)--(c) The 450-recipe index
+(\texttt{public/recipes.json}): cuisine, diet label and total cook
+time. (d) Per-serving calories against protein for the 1{,}014 dishes
+in \texttt{Indian\_Food\_Nutrition\_Processed.csv}.}
 \label{fig:datasets}
 \end{figure}
 
 \subsection{Training Pipeline}
-See \S\ref{sec:training} for the full protocol. In brief: four YAML
-configs (one per ablation cell) driving one \texttt{train.py} wrapper
+See \S\ref{sec:training} for the full protocol. In brief: one YAML
+config per ablation cell (plus one per stage-1 pretrain), driving one \texttt{train.py} wrapper
 around \texttt{ultralytics.YOLO.train}; an \texttt{evaluate.py} that
 writes paper-ready \texttt{metrics.json} and \texttt{per\_class.csv}
 plus a measured CPU/CUDA latency; an \texttt{ablate.py} that runs
-the four cells in sequence and aggregates
+the cells in dependency order and aggregates
 \texttt{results/ablation.csv}; and a \texttt{plot.py} that produces
-the three figure PNGs this report embeds.
+the figure PNGs this report embeds.
 
 %====================================================================
 \section{Page Walkthrough}
+\label{sec:pages}
 
 Table~\ref{tab:pages} summarises the implemented behaviour of each
 route. Every row is backed by code on \texttt{main}, not a mockup.
+Fig.~\ref{fig:overview} shows four of these pages in the running
+application.
 
-\begin{table}[!t]
+\begin{table*}[!t]
 \caption{Implemented AHAAR routes and the data signals that drive each.}
 \label{tab:pages}
 \centering
 \footnotesize
-\begin{tabularx}{\linewidth}{l l X}
+\begin{tabularx}{\textwidth}{l l X}
 \toprule
 \textbf{Route} & \textbf{Page} & \textbf{Behaviour} \\
 \midrule
@@ -462,86 +482,16 @@ route. Every row is backed by code on \texttt{main}, not a mockup.
                                  and the meals it is based on. \\
 \bottomrule
 \end{tabularx}
-\end{table}
+\end{table*}
 
-\subsection{Screenshots}
-
-Figs.~\ref{fig:ui-home}--\ref{fig:ui-health} are captured from the
-running application on \texttt{main} (Vite dev build, desktop
-viewport, 1280\,px wide). The pantry is filled with the app's built-in
-\emph{sample pantry} (tomato, paneer, milk, spinach, onion, chilli,
-garlic, ginger) and the four default family members, so every
-downstream page shows live, data-driven output rather than an empty
-state. The \texttt{/detect} page is omitted because it requires the
-inference server to be running.
-
-\begin{figure}[!htbp]
+\begin{figure}[!tb]
 \centering
-\includegraphics[width=0.9\linewidth]{figures/app_home.jpg}\\[4pt]
-\includegraphics[width=0.9\linewidth]{figures/app_home_hi.jpg}
-\caption{Landing page (top) and the same page with the language
-selector switched to Hindi (bottom). The navigation bar, brand name
-and primary call-to-action are translated; long-form body copy is
-not yet translated and falls back to English.}
-\label{fig:ui-home}
-\end{figure}
-
-\begin{figure}[!htbp]
-\centering
-\includegraphics[width=0.9\linewidth]{figures/app_pantry.jpg}
-\caption{\texttt{/pantry}. Top: Nutrition Profile card averaging
-per-serving macros over the 11 dishes the pantry can make. Bottom:
-editable quantities (left) and the ingredient $\rightarrow$ dish
-$\rightarrow$ nutrient graph (right).}
-\label{fig:ui-pantry}
-\end{figure}
-
-\begin{figure}[!htbp]
-\centering
-\includegraphics[width=0.9\linewidth]{figures/app_recipes.jpg}
-\caption{\texttt{/recipes}. Cards ranked by pantry match (ring),
-with diet / GI / protein / speed chips, per-serving nutrition, the
-missing ingredients, and one-tap ``Add to shopping list''.}
-\label{fig:ui-recipes}
-\end{figure}
-
-\begin{figure}[!htbp]
-\centering
-\includegraphics[width=0.9\linewidth]{figures/app_family.jpg}
-\caption{\texttt{/family}. Per-member condition, blood pressure and
-heart rate (left) drive the calibrated plate for each member (right):
-roti, rice, dal and sabzi portions with kcal and macro totals.}
-\label{fig:ui-family}
-\end{figure}
-
-\begin{figure}[!htbp]
-\centering
-\includegraphics[width=0.9\linewidth]{figures/app_plan.jpg}
-\caption{\texttt{/plan}. A 7-day $\times$ 3-slot plan generated under
-a pure-vegetarian diet, per-slot time budgets (25/45/60 min) and a
-three-day no-repeat window; each cell shows cook time and pantry
-match.}
-\label{fig:ui-plan}
-\end{figure}
-
-\begin{figure}[!htbp]
-\centering
-\includegraphics[width=0.9\linewidth]{figures/app_cook.jpg}
-\caption{\texttt{/cook}. Step-by-step cook-along with the per-step
-timer, voice-guide toggle and an ingredient checklist in which
-items already in the pantry are ticked.}
-\label{fig:ui-cook}
-\end{figure}
-
-\begin{figure}[!htbp]
-\centering
-\includegraphics[width=0.9\linewidth]{figures/app_health_cgm.jpg}
-\caption{\texttt{/health} CGM card with the bundled \emph{synthetic}
-seven-day trace (672 points, demo only). The ADA 2020 metrics
-(mean glucose, GMI, time in / above / below range, CV) are computed
-in the browser; the shaded band is the 70--180~mg/dL target range and
-the overnight dip on 18~Nov is flagged as one hypo event.}
-\label{fig:ui-health}
+\includegraphics[width=\columnwidth]{figures/ahaar_overview.jpg}
+\caption{AHAAR running with the built-in sample pantry: (a)~landing
+page, (b)~pantry with the Nutrition Profile card, (c)~7-day $\times$
+3-slot weekly plan, (d)~step-by-step Cook-along with timer and voice
+guide.}
+\label{fig:overview}
 \end{figure}
 
 %====================================================================
@@ -549,24 +499,27 @@ the overnight dip on 18~Nov is flagged as one hypo event.}
 \label{sec:methodology}
 
 \subsection{Fridge-Interior Ingredient Detection}
+\label{sec:fridge}
 
 Existing Indian food datasets~\cite{foodnet2017, indianfood10,
 indianfoodnet2023} contain \emph{plated} meals -- not raw ingredients
-inside a refrigerator. We therefore construct \textbf{AHAAR-Fridge}
-(\texttt{datasets/ahaar-fridge.yaml}): 20 ingredient classes commonly
+inside a refrigerator. We therefore define \textbf{AHAAR-Fridge}
+(\texttt{datasets/ahaar-fridge.yaml}), a planned fridge-interior
+dataset that has not yet been captured: 20 ingredient classes commonly
 found in Indian kitchens (tomato, onion, paneer, milk, spinach,
 green chilli, ginger, garlic, potato, cauliflower, carrot, okra,
 lemon, yoghurt, ghee, butter, eggs, coriander leaves, curry leaves,
 methi leaves). The initial target is $\geq$150 photographs per class
 in realistic household lighting with a 80/20 train/val split.
 
-The detector served at inference time is a YOLOv11m model fine-tuned
-from COCO initialisation. The two-stage transfer path -- COCO
-$\rightarrow$ IndianFood20 (plated dishes) $\rightarrow$ AHAAR-Fridge
-(ingredient-level) -- is encoded as two YAML configs
-(\texttt{stage1\_if20\_yolov11m.yaml} and
-\texttt{yolov11m\_if20\_pretrain.yaml}) and is one of the four cells
-in the ablation.
+The detector served at inference time is a separate YOLOv11m model
+fine-tuned from COCO on 107 pantry classes (\S\ref{sec:training}-B).
+The proposed two-stage transfer path -- COCO $\rightarrow$ a
+20-class Indian food dataset (IF20) $\rightarrow$ AHAAR-Fridge -- is
+encoded as two YAML configs (\texttt{stage1\_if20\_yolov11m.yaml}
+and \texttt{yolov11m\_if20\_pretrain.yaml}). Until AHAAR-Fridge is
+captured, the ablation in \S\ref{sec:training} evaluates the
+transfer step on IF20 itself.
 
 The on-device quality gate from \texttt{src/lib/quality.ts}
 (brightness mean, Laplacian sharpness, resolution check) is retained
@@ -578,7 +531,10 @@ as a pre-filter -- an element absent from
 The implemented ranker in \texttt{src/lib/recipes.ts} computes, per
 recipe~\(r\) and household~\(\mathcal{F}\):
 \begin{equation}
-\mathrm{match}(r) = 0.6\, c(r) + 0.25\, \mathrm{fit}(r, \mathcal{F}) + 0.15\, \mathrm{speed}(r),
+\begin{split}
+\mathrm{match}(r) ={}& 0.6\, c(r) + 0.25\, \mathrm{fit}(r, \mathcal{F})\\
+&+ 0.15\, \mathrm{speed}(r),
+\end{split}
 \label{eq:rank}
 \end{equation}
 where \(c(r)\) is pantry coverage, \(\mathrm{speed}(r)\) grows as
@@ -588,9 +544,17 @@ members are present, saturated-fat sources or deep frying when
 cardiac members are present, and acidic triggers (chilli, tamarind,
 tomato, lemon, kokum) when reflux members are present. The penalty
 set is rule-based and transparently shown in each card's ``Why
-this?'' drawer.
+this?'' drawer. Fig.~\ref{fig:recipes} shows the resulting card grid.
 
-The user-facing nutrition filter chips (\S IV,
+\begin{figure}[!tb]
+\centering
+\includegraphics[width=\columnwidth]{figures/ahaar_recipes.png}
+\caption{Recipes page: match-ranked recipe cards with per-serving
+nutrition chips and pantry coverage.}
+\label{fig:recipes}
+\end{figure}
+
+The user-facing nutrition filter chips (\S\ref{sec:pages},
 \texttt{/recipes}) and six sort modes (\textit{Best match},
 \textit{Quickest}, \textit{Lowest calories}, \textit{Highest
 protein}, \textit{Highest fibre}, \textit{Lowest sodium}) extend the
@@ -615,11 +579,23 @@ portion rollups and are the basis of the per-member \texttt{Macros}
 totals and the household-wide dinner totals. A future iteration will
 add an optional reference-coin affordance; the current honest
 reporting is sufficient for the application's cooking guidance role.
+Fig.~\ref{fig:family} shows the resulting per-member plates on the
+Family page; each member's condition and latest blood-pressure
+reading adjust the portions.
+
+\begin{figure}[!tb]
+\centering
+\includegraphics[width=\columnwidth]{figures/ahaar_family.jpg}
+\caption{Family page: per-member condition, blood pressure and heart
+rate (left) and the calibrated plate for each member (right), with
+roti, rice, dal and sabzi portions and per-plate kcal and macros.}
+\label{fig:family}
+\end{figure}
 
 \subsection{Dish-Level Nutrition Enrichment}
 
 \texttt{datasets/scripts/build\_recipes.py} loads
-\texttt{Indian\_Food\_Nutrition\_Processed.csv} (1{,}005 dishes), indexes
+\texttt{Indian\_Food\_Nutrition\_Processed.csv} (1{,}014 dishes), indexes
 each row under every parenthesised Hindi-English variant (yielding
 1{,}381 keys so \textit{Spinach paneer (Palak paneer)} is searchable as
 either), and matches recipe names using an \emph{exact
@@ -628,7 +604,18 @@ with a stop-word filter and Hindi spelling-drift normalisation
 (e.g.\ \texttt{rajmah} $\rightarrow$ \texttt{rajma}). On a 15-dish
 sanity test the matcher resolves 14 of 15 common Indian dishes
 (including Palak Paneer, Rajma, Aloo Gobi, Dal Makhani); the one
-miss (Chole Bhature) is not present in the source CSV.
+miss (Chole Bhature) is not present in the source CSV. The matched
+nutrition also drives the per-member advice on the Health page
+(Fig.~\ref{fig:health}).
+
+\begin{figure}[!tb]
+\centering
+\includegraphics[width=\columnwidth]{figures/ahaar_health.png}
+\caption{Health page: per-member nutrition-aware advice for the
+sample pantry, with condition-specific targets (sodium for
+hypertension, free sugar and fibre for pre-diabetes).}
+\label{fig:health}
+\end{figure}
 
 \subsection{CGM-Aware Personalisation}
 
@@ -641,11 +628,22 @@ non-physiological values. Metrics follow the ADA 2020 consensus:
   \item Mean glucose, standard deviation, CV\%.
   \item GMI (``estimated A1c'') = \(3.31 + 0.02392 \times \bar{g}\),
         per Bergenstal \emph{et al.}\ 2018.
-  \item Time-in-Range (70--180\,mg/dL), Time-Above-Range (>180),
-        Time-Below-Range (<70).
+  \item Time-in-Range (70--180\,mg/dL), Time-Above-Range ($>$180),
+        Time-Below-Range ($<$70).
   \item Hyper/hypo \emph{event} counts (contiguous out-of-range
         runs of \(\geq\)15~min).
 \end{itemize}
+Fig.~\ref{fig:cgm} shows the dashboard for the seven-day synthetic
+sample trace.
+
+\begin{figure}[!tb]
+\centering
+\includegraphics[width=\columnwidth]{figures/ahaar_cgm.png}
+\caption{CGM dashboard: ADA 2020 metrics (Time-in-Range 99\%, GMI
+5.8\%) and a seven-day synthetic glucose trace with the 70--180~mg/dL
+band.}
+\label{fig:cgm}
+\end{figure}
 
 The personalisation layer closes the loop: for every meal logged on
 \texttt{/cook} that falls inside a member's CGM window,
@@ -673,38 +671,47 @@ contributing meal so the user can audit the learned signal.
 
 The complete training protocol is in \texttt{training/README.md} and
 reproducible from a cold clone of the repository. The pipeline is
-designed so the four ablation cells differ only by their YAML
-config; all other hyperparameters are identical.
+designed so the ablation cells differ only by their YAML config; all
+other hyperparameters are identical.
 
 \subsection{Ablation Design}
 
-\begin{table}[!t]
-\caption{Four-cell ablation design.}
+Table~\ref{tab:ablation-design} lists the planned cells. Each
+``+\,IF20'' cell first trains a stage-1 model on IF20 from COCO
+weights, then fine-tunes from that checkpoint with the first ten
+layers frozen. Three of the four cells were trained and evaluated;
+the YOLOv8m baseline was not rerun on IF20.
+
+\begin{table}[!tb]
+\caption{Ablation design (three of four cells evaluated).}
 \label{tab:ablation-design}
 \centering
-\footnotesize
-\begin{tabularx}{\linewidth}{l l X}
+\scriptsize
+\setlength{\tabcolsep}{3pt}
+\begin{tabularx}{\columnwidth}{l l X}
 \toprule
-\textbf{Cell} & \textbf{Config (training/configs/)} & \textbf{Purpose} \\
+\textbf{Cell} & \textbf{Config (\texttt{training/configs/})} & \textbf{Purpose} \\
 \midrule
-YOLOv8m baseline   & \texttt{yolov8m\_baseline.yaml}         & Prior-art backbone, no IndianFood20 pretrain \\
-YOLOv11m baseline  & \texttt{yolov11m\_baseline.yaml}        & Modern backbone, no IndianFood20 pretrain \\
-YOLOv11m + IF20    & \texttt{yolov11m\_if20\_pretrain.yaml}  & Test the value of two-stage transfer \\
-YOLOv11l + IF20    & \texttt{yolov11l\_if20\_pretrain.yaml}  & Test backbone scale at the same data budget \\
+YOLOv8m baseline  & \texttt{yolov8m\_baseline.yaml}        & Prior-art backbone, no IF20 pretrain (not run on IF20) \\
+YOLOv11m baseline & \texttt{yolov11m\_baseline.yaml}       & Modern backbone, no IF20 pretrain \\
+YOLOv11m + IF20   & \texttt{yolov11m\_if20\_pretrain.yaml} & Value of two-stage transfer \\
+YOLOv11l + IF20   & \texttt{yolov11l\_if20\_pretrain.yaml} & Backbone scale at same data budget \\
 \bottomrule
 \end{tabularx}
 \end{table}
 
-\subsection{Scope caveat}
+\subsection{Scope Caveat}
 
-The four-cell ablation reported below was executed on the
-IndianFood20 (IF20) plated-dish dataset of
-\cite{indianfood10}. AHAAR-Fridge, the fridge-interior ingredient
-dataset we scope in \S\ref{sec:methodology}A, is not yet captured;
+The ablation reported below was executed on a 20-class Indian food
+image dataset distributed on Kaggle
+(\texttt{theeyeschico/indian-food-classification}), which we refer
+to as IF20. It is a whole-image classification set, not the
+annotated platter dataset of~\cite{indianfood10}. AHAAR-Fridge, the fridge-interior ingredient
+dataset we scope in \S\ref{sec:fridge}, is not yet captured;
 it is the natural next experimental step. The three cells that
 originally pointed at \texttt{datasets/ahaar-fridge.yaml} were
 retargeted to \texttt{datasets/indianfood20.yaml} so the ablation
-could complete within the project's timeline. Two consequences follow:
+could complete within the project's timeline. Three consequences follow:
 
 \begin{enumerate}
   \item Because IF20 is distributed as folders of whole dish images
@@ -720,14 +727,16 @@ could complete within the project's timeline. Two consequences follow:
         comparable detection numbers on ingredient-level
         AHAAR-Fridge annotations will be lower and are deferred to
         future work.
-  \item Only eight of the twenty whitelisted IF20 class folders
-        were populated in the Kaggle drop used for this study, so
-        all per-class numbers in Fig.~\ref{fig:per-class} and the
-        aggregate mAP in Table~\ref{tab:ablation-results} describe
-        performance over those eight classes only. The remaining
-        twelve are listed at 0.00 because the val split contains
-        no samples for them; this is a dataset-availability
-        limitation, not a model failure.
+  \item Only eight of the twenty class folders matched the class
+        list used by the preparation script at training time
+        (\emph{chapati, chole\_bhature, dal\_makhani, fried\_rice,
+        idli, jalebi, pav\_bhaji, samosa}), so every number in
+        Table~\ref{tab:ablation-results} and Fig.~\ref{fig:per-class}
+        describes those eight classes. The other twelve appear at
+        0.00 in Fig.~\ref{fig:per-class} because the val split has no
+        samples for them. The class list has since been corrected to
+        the dataset's own twenty folders; retraining on all twenty is
+        future work.
   \item The production detector served to the AHAAR frontend in
         \S\ref{sec:architecture} is a separate, larger model
         trained prior to this study on the merged fruit-vegetable
@@ -743,7 +752,7 @@ With these caveats, the IF20 ablation supplies three defensible
 observations: whether two-stage transfer through a culturally-matched
 source improves modern-backbone performance on Indian-food targets,
 whether backbone scale (v11m vs v11l) matters at this data budget,
-and how latency and parameter count trade off across the four
+and how latency and parameter count trade off across the
 configurations.
 
 \subsection{Metrics}
@@ -768,27 +777,31 @@ Table~\ref{tab:ablation-results} reports the measured values from the
 three evaluated cells, run on the IF20 val split as described in the
 scope caveat above. All three cells use the same optimiser (AdamW,
 auto), image size (640), batch size (16 for m-sized backbones, 8 for
-l-sized), and seed (42). The yolov8m\_baseline cell is omitted from
-the table because its training was retargeted to the pipeline-smoke
-dataset earlier in the project and was not rerun against IF20.
+l-sized), and seed (42). The \texttt{yolov8m\_baseline} cell is omitted
+from the table because its training was retargeted to the
+pipeline-smoke dataset earlier in the project and was not rerun
+against IF20.
 
-\begin{table}[!t]
+\begin{table}[!tb]
 \caption{IF20 val-split ablation results. P = precision, R = recall.
 Latency is median ms/image over 300 timed inferences on a CUDA
 GeForce RTX~3050 6GB.}
 \label{tab:ablation-results}
 \centering
-\footnotesize
+\scriptsize
+\setlength{\tabcolsep}{2.5pt}
 \begin{tabular}{lrrrrrrr}
 \toprule
-\textbf{Run} & \textbf{mAP@50} & \textbf{mAP@50:95} & \textbf{P} & \textbf{R} & \textbf{F1} & \textbf{Params} & \textbf{Latency} \\
-             &                 &                    &            &            &             & \textbf{(M)}    & \textbf{(ms)}    \\
+\textbf{Run} & \textbf{mAP50} & \textbf{mAP50:95} & \textbf{P} & \textbf{R} & \textbf{F1} & \textbf{M} & \textbf{ms} \\
 \midrule
-YOLOv11m (baseline)      & 0.978 & 0.974 & 0.944 & 0.959 & 0.951 & 20.1 & 25.5 \\
-YOLOv11m + IF20 pretrain & \textbf{0.991} & 0.985 & \textbf{0.977} & \textbf{0.983} & \textbf{0.980} & 20.1 & 24.8 \\
-YOLOv11l + IF20 pretrain & 0.991 & \textbf{0.985} & 0.974 & 0.957 & 0.965 & 25.3 & 109.5 \\
+v11m (baseline) & 0.978 & 0.974 & 0.944 & 0.959 & 0.951 & 20.1 & 25.5 \\
+v11m + IF20     & \textbf{0.991} & 0.985 & \textbf{0.977} & \textbf{0.983} & \textbf{0.980} & 20.1 & 24.8 \\
+v11l + IF20     & 0.991 & \textbf{0.985} & 0.974 & 0.957 & 0.965 & 25.3 & 109.5 \\
 \bottomrule
 \end{tabular}
+\\
+\vspace{2pt}
+{\scriptsize M = parameters (millions); ms = median CUDA latency per image.}
 \end{table}
 
 Three observations follow. First, two-stage transfer through IF20
@@ -796,83 +809,63 @@ yields the best overall result at the m-sized backbone: adding the
 IF20 pretrain step lifts F1 from 0.951 to 0.980 and precision from
 0.944 to 0.977 at essentially no latency cost (24.8~ms vs 25.5~ms).
 Second, scaling the backbone from v11m to v11l does not improve
-mAP\mbox{@}50:95 at this data budget (0.985 for both, with the m-size
+mAP@50:95 at this data budget (0.985 for both, with the m-size
 winning on P/R/F1); the larger model is 34\% slower per image on CPU
 (272 vs 203~ms) and $4.4\times$ slower on the RTX~3050 (109.5 vs
 24.8~ms), which makes v11m+IF20 the Pareto-dominant choice for
-AHAAR's serving target (Fig.~\ref{fig:acc-lat}). Third, all three numbers sit in the 0.95--0.99 range, which
-the scope caveat predicts: the IF20 labels are whole-image proxies and
-agreement with those labels is classification-grade. We report the
-values honestly without claiming they reflect fine-grained
-ingredient-level detection accuracy.
+AHAAR's serving target (Fig.~\ref{fig:accuracy-latency}). Third, all three numbers sit
+in the 0.95--0.99 range, which the scope caveat predicts: the IF20
+labels are whole-image proxies and agreement with those labels is
+classification-grade. We report the values honestly without claiming
+they reflect fine-grained ingredient-level detection accuracy.
+
+\begin{figure}[!tb]
+\centering
+\includegraphics[width=\columnwidth]{figures/ahaar_accuracy_latency.png}
+\caption{Accuracy vs.\ latency across the three evaluated cells
+(bubble area $\propto$ parameter count). YOLOv11m + IF20 pretrain
+reaches the highest F1 (0.980) at the lowest latency (24.8~ms).}
+\label{fig:accuracy-latency}
+\end{figure}
 
 \subsection{Figures}
 
-\texttt{training/plot.py} generates three figures at 180\,DPI that
-drop straight into IEEEtran \texttt{\textbackslash{}includegraphics}:
-\textbf{(i)} the four-cell bar chart comparison,
+\texttt{training/plot.py} generates the training figures at 180\,DPI:
+\textbf{(i)} the ablation bar chart comparison,
 \textbf{(ii)} per-class mAP@50 sorted descending for the winning cell,
 and
 \textbf{(iii)} loss + mAP across epochs.
 Figures~\ref{fig:ablation-bars}, \ref{fig:per-class} and \ref{fig:curves}
-embed the outputs for the winning YOLOv11m + IF20 cell;
-Fig.~\ref{fig:acc-lat} plots the accuracy/latency trade-off from the
-same \texttt{ablation.csv}.
+embed the outputs for the winning YOLOv11m + IF20 cell.
 
-\begin{figure}[!htbp]
+\begin{figure}[!tb]
 \centering
-\includegraphics[width=0.75\linewidth]{figures/accuracy_latency.png}
-\caption{F1 against median CUDA latency for the three evaluated
-cells; bubble area is proportional to parameter count. IF20
-pretraining moves the v11m backbone straight up (better F1, same
-latency); scaling to v11l moves right without a matching gain.}
-\label{fig:acc-lat}
-\end{figure}
-
-\begin{figure}[!t]
-\centering
-\includegraphics[width=0.96\linewidth]{figures/ablation_bars.png}
-\caption{Four-cell ablation bar chart. mAP@50, mAP@50:95, F1 per run.
+\includegraphics[width=\columnwidth]{figures/ablation_bars.png}
+\caption{Ablation bar chart: mAP@50, mAP@50:95, and F1 per run.
 YOLOv11m + IF20 pretrain is the Pareto-dominant configuration.}
 \label{fig:ablation-bars}
 \end{figure}
 
-\begin{figure}[!t]
+\begin{figure}[!tb]
 \centering
-\includegraphics[width=0.96\linewidth]{figures/ahaar_per_class_bars.png}
+\includegraphics[width=\columnwidth]{figures/ahaar_per_class_bars.png}
 \caption{Per-class mAP@50 on the IF20 val split for the winning
-YOLOv11m + IF20 pretrain cell, sorted descending. Eight of the
-twenty whitelisted classes carried images in the Kaggle drop used
-for this study (\emph{chapati, chole\_bhature, dal\_makhani, fried\_rice,
-idli, jalebi, pav\_bhaji, samosa}); the remaining twelve are shown
-at 0.00 because they contain no val samples, and re-fetching the
-full twenty-folder split is deferred to future work.}
+YOLOv11m + IF20 pretrain cell, sorted descending. Only the eight
+classes with images were trained and evaluated; the twelve at 0.00
+had no samples (see \S\ref{sec:training}-B).}
 \label{fig:per-class}
 \end{figure}
 
-\begin{figure}[!t]
+\begin{figure}[!tb]
 \centering
-\includegraphics[width=0.96\linewidth]{figures/ahaar_training_curves.png}
+\includegraphics[width=\columnwidth]{figures/ahaar_training_curves.png}
 \caption{Training curves for the winning cell. Left: box loss on
-train and val splits across 50 epochs. Right: mAP@50 and mAP@50:95
-on the val split.}
+train and val splits. Right: mAP@50 and mAP@50:95 on the val split.
+The run was configured for 50 epochs and ended after about 20, when
+early stopping (patience 15) found no further improvement.}
 \label{fig:curves}
 \end{figure}
 
-\begin{figure*}[!t]
-\centering
-\includegraphics[width=0.96\textwidth]{figures/system_flow.png}
-\caption{AHAAR end-to-end data flow. UI pages (cream), models
-(green), data assets (amber), and output metrics (terracotta).
-Solid arrows are mandatory data paths; dashed arrows are optional
-(Lazy Mode skips the pantry edit; recipe nutrition is attached at
-build time from the Indian Food Nutrition CSV; GSI feeds back into
-the ranker as per-member impact chips). The single external
-runtime dependency is the FastAPI inference server, which fits on
-an RTX~3050 and can be substituted by the browser-ONNX pipeline
-documented in \texttt{training/README.md} \S6.}
-\label{fig:flow}
-\end{figure*}
 
 %====================================================================
 \section{Evaluation Plan}
@@ -880,8 +873,8 @@ documented in \texttt{training/README.md} \S6.}
 
 \begin{itemize}
   \item \textbf{Detection:} mAP@50, mAP@50:95, per-class precision
-        and recall on AHAAR-Fridge val split, for all four ablation
-        cells. Target: cell 3 (YOLOv11m + IF20 pretrain) exceeds the
+        and recall on the AHAAR-Fridge val split once it is captured,
+        for every ablation cell. Target: cell 3 (YOLOv11m + IF20 pretrain) exceeds the
         91.8\% mAP@50 reported by~\cite{indianfood10} on
         IndianFood10, demonstrating that the ingredient-level task
         is tractable and that two-stage transfer generalises.
@@ -896,8 +889,8 @@ documented in \texttt{training/README.md} \S6.}
   \item \textbf{CGM metrics:} agreement of
         \texttt{src/lib/cgm.ts} with LibreView's own reported
         TIR/TBR/TAR on a real-world export, plus synthetic validation
-        against \texttt{public/sample-cgm.csv} which is constructed
-        with known ground-truth hyper and hypo events.
+        against \texttt{public/sample-cgm.csv}, whose one overnight
+        hypo event is known by construction.
   \item \textbf{GSI learner:} leave-one-meal-out cross-validation
         of predicted iAUC against observed iAUC on 10 logged meals
         per diabetic member (small, illustrative).
@@ -913,8 +906,8 @@ documented in \texttt{training/README.md} \S6.}
 AHAAR deliberately refuses two tempting shortcuts: (i) relying on an
 off-the-shelf Indian food detector trained on plated meals, and
 (ii) performing monocular volume estimation without a reference
-object. The first is addressed by AHAAR-Fridge and the two-stage
-transfer pipeline; the second is addressed by the standardised
+object. The first is addressed by the planned AHAAR-Fridge dataset
+and the two-stage transfer pipeline; the second is addressed by the standardised
 reporting convention, which is honest about the limit.
 
 The GSI-based recipe re-ranker is the project's most differentiated
@@ -941,9 +934,10 @@ recipe recommendation, per-member portioning, weekly meal planning,
 step-by-step cooking, and CGM-aware health personalisation. Every
 page is backed by real code and real data; every design choice is
 anchored in a peer-reviewed IEEE paper; the training pipeline
-reproduces the paper's claimed metrics from a cold clone.
+reproduces the reported metrics from a cold clone.
 
-Future work includes: (i) scaling AHAAR-Fridge to 50 classes with
+Future work includes: (i) capturing AHAAR-Fridge, retraining the
+ablation on all twenty IF20 classes, and scaling to 50 classes with
 semi-supervised labelling; (ii) extending the GSI learner to a
 regression-based model under IRB supervision on a type-2 diabetic
 cohort; (iii) replacing the substring-based recipe matcher with a
@@ -955,7 +949,7 @@ reference-coin affordance for gram-accurate portion estimation.
 \section*{Acknowledgment}
 The authors thank Ms.\ Sharlene Rebeiro for her guidance throughout
 the project, and the open-source maintainers of Ultralytics YOLO,
-FastAPI, React, TailwindCSS, i18next, Workbox, and PostgreSQL.
+FastAPI, React, TailwindCSS, i18next, and Workbox.
 
 %====================================================================
 \bibliographystyle{IEEEtran}
