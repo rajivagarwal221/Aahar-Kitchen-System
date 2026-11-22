@@ -20,23 +20,23 @@ train: images/train
 val:   images/val
 
 names:
-  0:  biryani
-  1:  butter_chicken
-  2:  chapati
-  3:  chole_bhature
-  4:  dal_makhani
-  5:  dosa
-  6:  fried_rice
-  7:  idli
-  8:  jalebi
-  9:  kofta
-  10: naan
-  11: pakoda
-  12: paneer_tikka
-  13: pani_puri
-  14: pav_bhaji
-  15: poha
-  16: pulao
-  17: rasmalai
-  18: samosa
-  19: upma
+  0:  burger
+  1:  butter_naan
+  2:  chai
+  3:  chapati
+  4:  chole_bhature
+  5:  dal_makhani
+  6:  dhokla
+  7:  fried_rice
+  8:  idli
+  9:  jalebi
+  10: kaathi_rolls
+  11: kadai_paneer
+  12: kulfi
+  13: masala_dosa
+  14: momos
+  15: paani_puri
+  16: pakode
+  17: pav_bhaji
+  18: pizza
+  19: samosa
