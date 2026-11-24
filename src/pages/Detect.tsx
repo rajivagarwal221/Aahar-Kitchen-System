@@ -6,7 +6,7 @@ import { FridgeArt } from '../components/FridgeArt';
 import { Box, Camera, Check, Reset, X } from '../components/Icons';
 import { Item } from '../lib/data';
 import { useKitchen } from '../lib/store';
-import { detectIngredients } from '../lib/inference';
+import { Detection, detectIngredients } from '../lib/inference';
 import { detectionsToItems } from '../lib/detectShots';
 
 type Phase = 'ready' | 'loading-model' | 'scanning' | 'done' | 'error';
@@ -17,7 +17,11 @@ export default function Detect() {
   const [active, setActive] = useState(0);
   const [phase, setPhase] = useState<Phase>('ready');
   const [modelProgress, setModelProgress] = useState<number>(0);
+  const [shotDone, setShotDone] = useState<number>(0);
+  // Merged list across every shot, plus each shot's own boxes for the overlay.
   const [results, setResults] = useState<Item[]>([]);
+  const [perShot, setPerShot] = useState<Record<string, Item[]>>({});
+  const [seenIn, setSeenIn] = useState<Record<string, number>>({});
   const [kept, setKept] = useState<Record<string, boolean>>({});
   const [hover, setHover] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -25,36 +29,56 @@ export default function Detect() {
 
   const shot = shots[active];
   const keptCount = Object.values(kept).filter(Boolean).length;
+  const shotBoxes = shot ? perShot[shot.id] ?? [] : [];
+  const shotKey = shots.map((s) => s.id).join('|');
 
   useEffect(() => {
     abortRef.current = false;
     return () => { abortRef.current = true; };
   }, []);
 
-  // Boxes belong to the shot they were found in; clear them when another shot is picked.
+  // A different set of shots invalidates the combined results.
   useEffect(() => {
     setPhase('ready');
     setResults([]);
+    setPerShot({});
+    setSeenIn({});
     setKept({});
     setError(null);
-  }, [active]);
+    setActive((a) => Math.min(a, Math.max(0, shots.length - 1)));
+  }, [shotKey]);
 
   const runDetection = async () => {
-    if (!shot) return;
+    if (shots.length === 0) return;
     setError(null);
     setResults([]);
+    setPerShot({});
+    setSeenIn({});
     setKept({});
     setModelProgress(0);
+    setShotDone(0);
     setPhase('loading-model');
     try {
-      const dets = await detectIngredients(shot.src, (p) => {
-        if (!abortRef.current) setModelProgress(p);
-      });
-      if (abortRef.current) return;
+      const all: Detection[] = [];
+      const boxes: Record<string, Item[]> = {};
+      const seen: Record<string, number> = {};
+      for (let i = 0; i < shots.length; i++) {
+        setActive(i);
+        const dets = await detectIngredients(shots[i].src, (p) => {
+          if (!abortRef.current) setModelProgress(p);
+        });
+        if (abortRef.current) return;
+        boxes[shots[i].id] = detectionsToItems(dets);
+        for (const cls of new Set(dets.map((d) => d.className))) seen[cls] = (seen[cls] ?? 0) + 1;
+        all.push(...dets);
+        setShotDone(i + 1);
+      }
       setPhase('scanning');
-      const dedup = detectionsToItems(dets);
-      setResults(dedup);
-      setKept(Object.fromEntries(dedup.map((i) => [i.id, true])));
+      const merged = detectionsToItems(all);
+      setPerShot(boxes);
+      setSeenIn(seen);
+      setResults(merged);
+      setKept(Object.fromEntries(merged.map((i) => [i.id, true])));
       setDetected(true);
       setPhase('done');
     } catch (e: unknown) {
@@ -84,7 +108,7 @@ export default function Detect() {
         kicker="Ingredient detection"
         icon={<Box />}
         title="Every item, named and boxed."
-        lead="A YOLOv11m model fine-tuned on 107 Indian pantry classes checks one shot at a time. Each box carries a confidence score; switch off anything it got wrong before it reaches your pantry."
+        lead="A YOLOv11m model fine-tuned on 107 Indian pantry classes checks every shot you took and combines them into one list. Each box carries a confidence score; switch off anything it got wrong before it reaches your pantry."
       >
         <span className="chip border-ink/15 bg-surface text-muted">YOLOv11m · 107 classes</span>
       </PageHeader>
@@ -115,15 +139,15 @@ export default function Detect() {
                   />
                   <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 chip border-0 bg-ink text-bg !px-4 !py-2">
                     {phase === 'loading-model'
-                      ? `Sending shot ${Math.round(modelProgress * 100)}%`
-                      : 'Looking for ingredients…'}
+                      ? `Shot ${Math.min(shotDone + 1, shots.length)} of ${shots.length} · ${Math.round(modelProgress * 100)}%`
+                      : 'Combining shots…'}
                   </span>
                 </motion.div>
               )}
             </AnimatePresence>
 
             {phase === 'done' &&
-              results.map((it, i) => {
+              shotBoxes.map((it, i) => {
                 const [x, y, w, h] = it.box;
                 const on = kept[it.id];
                 const dim = hover && hover !== it.id;
@@ -161,6 +185,7 @@ export default function Detect() {
                 <button
                   key={s.id}
                   onClick={() => setActive(i)}
+                  disabled={phase === 'loading-model' || phase === 'scanning'}
                   aria-label={`Show shot ${i + 1}`}
                   className={`w-16 h-16 rounded-lg overflow-hidden shrink-0 border-2 transition-colors ${i === active ? 'border-leaf' : 'border-transparent opacity-70'}`}
                 >
@@ -175,7 +200,9 @@ export default function Detect() {
               {phase === 'error'
                 ? <span className="text-chilli">Detection failed: {error}</span>
                 : shot
-                  ? 'Live inference from the AHAAR detection backend on this shot.'
+                  ? phase === 'done' && shots.length > 1
+                    ? `Showing boxes for shot ${active + 1} of ${shots.length}. The list on the right combines all of them.`
+                    : `Live inference from the AHAAR detection backend on ${shots.length === 1 ? 'this shot' : `all ${shots.length} shots`}.`
                   : <>No shots yet. <Link to="/scan" className="text-leaf underline underline-offset-2">Take a photo</Link></>}
             </p>
             {phase === 'done' ? (
@@ -187,9 +214,9 @@ export default function Detect() {
                 onClick={runDetection}
               >
                 <Box width={18} />{' '}
-                {phase === 'loading-model' ? `Loading ${Math.round(modelProgress * 100)}%`
-                  : phase === 'scanning' ? 'Detecting…'
-                  : 'Run detection'}
+                {phase === 'loading-model' ? `Shot ${Math.min(shotDone + 1, shots.length)} of ${shots.length}`
+                  : phase === 'scanning' ? 'Combining…'
+                  : shots.length > 1 ? `Detect all ${shots.length} shots` : 'Run detection'}
               </button>
             )}
           </div>
@@ -207,12 +234,14 @@ export default function Detect() {
                 <span className="mx-auto w-14 h-14 rounded-2xl bg-surface text-muted grid place-items-center"><Camera /></span>
                 <p className="mt-3 text-muted text-[0.92rem]">
                   {phase === 'loading-model'
-                    ? `Sending shot… ${Math.round(modelProgress * 100)}%`
+                    ? `Checking shot ${Math.min(shotDone + 1, shots.length)} of ${shots.length}…`
                     : phase === 'scanning'
-                      ? 'Reading the shelf…'
+                      ? 'Combining what every shot found…'
                       : phase === 'error'
-                        ? 'Try again or pick a different shot.'
-                        : 'Run detection to see what is in the shot.'}
+                        ? 'Try again or remove the shot that failed.'
+                        : shots.length > 1
+                          ? `Run detection to check all ${shots.length} shots at once.`
+                          : 'Run detection to see what is in the shot.'}
                 </p>
               </div>
             </div>
@@ -220,7 +249,7 @@ export default function Detect() {
             <div className="flex-1 grid place-items-center text-center py-10">
               <div>
                 <p className="mt-3 text-muted text-[0.92rem]">
-                  No ingredients detected above the confidence threshold. Try a brighter, closer shot.
+                  No ingredients detected above the confidence threshold in any shot. Try brighter, closer shots.
                 </p>
               </div>
             </div>
@@ -240,7 +269,14 @@ export default function Detect() {
                   >
                     <span className="w-3 h-3 rounded-full shrink-0 border border-ink/15" style={{ background: it.color }} />
                     <div className="flex-1 min-w-0">
-                      <p className={`font-medium truncate ${on ? '' : 'line-through'}`}>{it.name}</p>
+                      <p className={`font-medium truncate ${on ? '' : 'line-through'}`}>
+                        {it.name}
+                        {shots.length > 1 && (
+                          <span className="ml-2 text-[0.75rem] font-normal text-muted">
+                            {seenIn[it.id] ?? 1} of {shots.length} shots
+                          </span>
+                        )}
+                      </p>
                       <div className="mt-1 h-1 rounded-full bg-ink/10 overflow-hidden">
                         <motion.div
                           className={`h-full rounded-full ${it.conf >= 90 ? 'bg-leaf' : it.conf >= 70 ? 'bg-turmeric' : 'bg-chilli'}`}

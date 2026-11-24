@@ -424,9 +424,12 @@ application.
                                  optional \textit{Lazy Mode} that jumps
                                  straight to \texttt{/recipes} after
                                  detection. \\
-\texttt{/detect}  & Detection    & Calls \texttt{POST /detect}, renders the
-                                 returned YOLOv11m bounding boxes over
-                                 the captured shot. ``Skip to recipes''
+\texttt{/detect}  & Detection    & Sends every captured shot (up to six)
+                                 to \texttt{POST /detect} in one pass and
+                                 merges the results into a single list
+                                 (piece counts summed across shots), while
+                                 keeping each shot's bounding boxes for
+                                 review. ``Skip to recipes''
                                  button on the same page replicates the
                                  Lazy-Mode flow for users who did not
                                  enable it. \\
