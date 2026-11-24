@@ -45,8 +45,8 @@
   \textit{Group 19, Academic Year 2026--27}\\
   \textit{Project Guide: Ms.\ Sharlene Rebeiro}%
   \thanks{Source code: \url{https://github.com/rajivagarwal221/Aahar-Kitchen-System}.
-  All modules reported here are implemented, under test, and live on
-  \texttt{main}.}
+  All modules reported here are implemented on the \texttt{main}
+  branch.}
 }
 
 \markboth{AHAAR Project Report, 2026--27}{Agarwal \MakeLowercase{\textit{et al.}}: AHAAR -- Kitchen System}
@@ -59,10 +59,10 @@ Household food waste, repetitive cooking decisions, and the lack of
 personalized dietary guidance remain persistent problems in Indian
 kitchens. We present \textbf{AHAAR}, a progressive web application
 that turns one photograph of the inside of a refrigerator into a
-ranked set of culturally-appropriate recipes, portioned per family
+ranked set of culturally appropriate recipes, portioned per family
 member, re-ranked over time by each user's personal glycemic response
 captured from a Continuous Glucose Monitor (CGM), and surfaced in ten
-Indian languages. The system is end-to-end implemented: a YOLOv11m
+Indian languages. The system is implemented end to end: a YOLOv11m
 detector fine-tuned on 107 Indian pantry classes runs behind a FastAPI
 service and detects ingredients from a phone photograph; a 450-recipe
 index pre-built from the IndianFoodDataset drives a client-side
@@ -70,10 +70,10 @@ scorer that combines pantry coverage with per-family-member
 condition-aware penalties; dish-level nutrition from the Indian Food
 Nutrition dataset (1{,}014 dishes) is attached to every recipe at
 build time; a LibreView / Dexcom CSV ingest pipeline computes the
-full ADA 2020 CGM metric suite in the browser; and a per-user
+standard consensus CGM metrics in the browser; and a per-user
 Glycemic Sensitivity Index learned from logged meals plus CGM windows
 labels every future recipe with a predicted impact chip per
-household member. We ground every design choice in ten peer-reviewed
+household member. We ground each major design choice in ten peer-reviewed
 IEEE papers spanning object detection, cross-modal recipe retrieval,
 nutrition-aware recommendation, portion estimation, and
 glucose-driven dietary monitoring, and describe the reproducible
@@ -95,11 +95,11 @@ in roughly 300~million Indian households every day. The answer is
 constrained by what is physically in the refrigerator, by regional
 cuisine preferences, by the age and health status of each family
 member, and -- for the roughly 101~million Indians living with
-diabetes~\cite{anjana2023icmr} -- by the glycemic impact of the chosen meal. No existing
-application addresses all four constraints simultaneously for Indian
-cuisine.
+diabetes~\cite{anjana2023icmr} -- by the glycemic impact of the chosen meal. We are
+not aware of an application that addresses all four constraints
+together for Indian cuisine.
 
-AHAAR is organised as a sequence of pages that mirror the real
+AHAAR is organized as a sequence of pages that mirror the real
 decision flow in a kitchen:
 \textit{Fridge Scan $\rightarrow$ Detection $\rightarrow$ Pantry $\rightarrow$ Recipes $\rightarrow$ Family Portions $\rightarrow$ Weekly Plan $\rightarrow$ Cook-along $\rightarrow$ Health}.
 Each page is backed by real data and real inference: the detector is
@@ -107,7 +107,7 @@ a trained YOLOv11m served from a FastAPI backend; the pantry page
 drives an aggregated nutrition profile from the 1{,}014-dish Indian
 Food Nutrition dataset; the health page ingests a Continuous Glucose
 Monitor export (Abbott LibreView or Dexcom Clarity) and computes the
-ADA~2020 CGM metric suite; and the recipe ranker learns a per-member
+consensus CGM metrics~\cite{battelino2019tir}; and the recipe ranker learns a per-member
 Glycemic Sensitivity Index from any logged meals aligned to CGM
 windows, then uses it to flag high-impact dishes before they are cooked.
 
@@ -116,15 +116,16 @@ each AHAAR subsystem; (ii) the implemented system architecture
 (frontend, inference backend, data assets, training pipeline);
 (iii) the proposed methodology for the primary ML contribution
 (a 20-class YOLOv11m dish classifier, an 8-class pilot ablation,
-and the planned AHAAR-Fridge dataset); (iv) the evaluation protocol that produces the
-paper-cited metrics; and (v) a discussion of novelty, limitations,
+and the planned AHAAR-Fridge dataset); (iv) the evaluation results
+and plan; and (v) a discussion of novelty, limitations,
 and future work.
 
 \textbf{Contributions.} We claim four contributions:
 \begin{enumerate}
-  \item A \emph{fridge-interior} Indian ingredient detection target
-        and the training/evaluation pipeline to produce it -- distinct
-        from existing \emph{plated-meal} Indian food datasets
+  \item The definition of a \emph{fridge-interior} Indian ingredient
+        dataset (AHAAR-Fridge, not yet captured) and a reproducible
+        training and evaluation pipeline for it -- distinct from
+        existing \emph{plated-meal} Indian food datasets
         \cite{foodnet2017,indianfood10,indianfoodnet2023}.
   \item A light-and-sharpness pre-filter and a Lazy-Mode scan flow
         that turns image capture into ranked recipes in one tap, in
@@ -148,7 +149,7 @@ and future work.
 \section{Related Work}
 \label{sec:related}
 
-We organise the related work along the five technical sub-problems
+We organize the related work along the five technical sub-problems
 addressed by AHAAR.
 
 \subsection{Object Detection and Food Recognition}
@@ -156,15 +157,15 @@ addressed by AHAAR.
 \textbf{YOLO}~\cite{redmon2016yolo} reframed object detection as a
 single regression problem, predicting bounding boxes and class
 probabilities in one network pass. This real-time, end-to-end approach
-is directly suitable for on-device fridge scanning, where latency
-budgets rule out two-stage detectors.
+suits interactive fridge scanning, where tight latency budgets favor
+single-stage detectors.
 
 \textbf{FoodNet}~\cite{foodnet2017}, published in \textit{IEEE Signal
 Processing Letters}, proposed an ensemble of deep CNNs for food
-classification and -- importantly for us -- introduced the first
-Indian food image database (50 classes, 100 images per class). It
-established the baseline that domain-specific ensembles beat generic
-backbones on Indian cuisine.
+classification and -- importantly for us -- introduced an Indian
+food image dataset of 50 classes with 100 images per class, showing
+that an ensemble of fine-tuned CNNs outperforms its individual
+networks on Indian dishes.
 
 \textbf{IndianFood10 / YOLOv4 Platters}~\cite{indianfood10} applied
 transfer learning with YOLOv4 to a 10-class dataset of staple Indian
@@ -172,8 +173,8 @@ plates and reported 91.8\% mAP, framing the central difficulties as
 ``lack of annotated Indian food datasets, non-distinct boundaries
 between dishes on one plate, and high intra-class variation.''
 
-\textbf{YOLO V11m Indian Cuisine}~\cite{yolov11indian2025}, the most
-recent IEEE paper in this space, combined 17-class Indian food
+\textbf{YOLO V11m Indian Cuisine}~\cite{yolov11indian2025}, a recent
+IEEE paper in this space, combined 17-class Indian food
 detection with portion-based nutritional estimation and reached
 \(\text{mAP}@50 = 0.94\). Its two-stage pipeline (detect $\rightarrow$
 look up nutrition) is the architectural template we extend.
@@ -183,21 +184,20 @@ look up nutrition) is the architectural template we extend.
 \textbf{im2recipe}~\cite{salvador2017im2recipe}, presented at CVPR
 2017, learns a joint embedding of recipe text and food images so that
 either modality can retrieve the other. AHAAR's current pipeline
-substitutes a lighter-weight substring-based matcher tuned for 107
-pantry classes against 16{,}524 recipe ingredient strings, which is
+substitutes a lighter-weight substring-based matcher that maps 107
+pantry classes onto the ingredient lists of 6{,}871 recipes, which is
 sufficient at our vocabulary size; the joint-embedding approach
 remains the natural upgrade path.
 
 \textbf{Recipe1M+}~\cite{marin2021recipe1m}, the IEEE TPAMI extension
 of im2recipe, scaled the embedding target to more than one million
-recipes and 13 million images and reported near-human retrieval
-performance -- the benchmark any production-grade recipe retrieval
-system is measured against.
+recipes and 13 million images, making it the standard large-scale
+benchmark for cross-modal recipe retrieval.
 
 \textbf{Inverse Cooking}~\cite{salvador2019inverse} (CVPR 2019)
 predicts an unordered set of ingredients from an image and then
 generates full cooking instructions. AHAAR's \textit{Lazy Mode}
-operationalises the same philosophy at the application level:
+operationalizes the same philosophy at the application level:
 capture, then skip the pantry edit step and land directly on ranked
 recipes -- turning three taps into one.
 
@@ -208,7 +208,7 @@ recipes -- turning three taps into one.
 combines content-based filtering with explicit nutritional constraints.
 AHAAR's \texttt{rankRecipes} implements a transparent variant of this
 approach as a weighted linear combination of pantry coverage (60\%),
-family fit (25\%), and speed (15\%); the family-fit term penalises
+family fit (25\%), and speed (15\%); the family-fit term penalizes
 high-GI ingredients for diabetic members, saturated fats for cardiac
 members, and acidic triggers for reflux, drawing from the member
 condition data entered on the Family page.
@@ -220,7 +220,7 @@ food volume from a wearable camera using SLAM, a modified convex-hull
 algorithm, and a 3D mesh reconstruction step. The paper is instructive
 primarily for what it concludes: reliable monocular volume estimation
 is \emph{hard} without either depth sensors or a visible reference
-object. AHAAR adopts an honest alternative: a standardised measurement
+object. AHAAR adopts an honest alternative: a standardized measurement
 convention (100~g = 1~bowl, 100~ml = 1~cup, 1~piece per roti) is used
 across the Family portion rollups so per-plate kilocalorie and
 macronutrient totals are reproducible without on-device volume
@@ -239,7 +239,7 @@ logged meals is the member's \textit{Glycemic Sensitivity Index}
 (GSI), used to predict the glycemic impact of unseen recipes.
 
 \medskip
-Table~\ref{tab:papermap} summarises how each paper maps to a
+Table~\ref{tab:papermap} summarizes how each paper maps to a
 component of the implemented AHAAR system.
 
 \begin{table}[!tb]
@@ -252,7 +252,7 @@ component of the implemented AHAAR system.
 \toprule
 \textbf{Ref.} & \textbf{Venue} & \textbf{AHAAR component} \\
 \midrule
-\cite{redmon2016yolo}        & CVPR 2016        & YOLOv11m detector in \texttt{/scan}, \texttt{/detect} \\
+\cite{redmon2016yolo}        & IEEE CVPR 2016   & YOLOv11m detector in \texttt{/scan}, \texttt{/detect} \\
 \cite{foodnet2017}           & IEEE SPL 2017    & Baseline for Indian-food backbone comparisons \\
 \cite{indianfood10}          & IEEE ICDEW 2022  & Indian plated-food detection baseline (91.8\% mAP) \\
 \cite{yolov11indian2025}     & IEEE CICN 2025   & Detection $\rightarrow$ nutrition pipeline template \\
@@ -306,12 +306,13 @@ documented in \texttt{training/README.md} \S6.}
   \item \textbf{Firebase Authentication} for per-account state
         isolation; local data (pantry, members, readings, glucose,
         meals) is keyed to the signed-in UID in \texttt{localStorage}.
-  \item \textbf{react-i18next} internationalisation with ten Indian
+  \item \textbf{react-i18next} internationalization with ten Indian
         languages
         (English, Hindi, Bengali, Tamil, Telugu, Marathi, Gujarati,
-        Kannada, Malayalam, Punjabi). Missing keys fall back to
-        English; the UI chrome (nav, CTAs, footer) is fully
-        translated.
+        Kannada, Malayalam, Punjabi). The navigation bar, header
+        buttons, menu and footer are translated; long-form page text
+        is still in English, which is also the fallback for missing
+        keys.
   \item \textbf{vite-plugin-pwa} with a Workbox-generated service
         worker; after first load the application shell, recipe
         index, and sample CGM data are available offline.
@@ -342,7 +343,7 @@ friendly English labels (``Toor dal'', ``Methi (fenugreek) leaves'')
 for the UI. Each model slot has independent environment-variable
 resolution (\texttt{MODEL\_PATH\_INGREDIENTS} / \texttt{MODEL\_URL\_INGREDIENTS}
 and \texttt{MODEL\_PATH\_DISHES} / \texttt{MODEL\_URL\_DISHES}) so
-upgrading one doesn't disturb the other, and the dishes slot is
+upgrading one does not disturb the other, and the dishes slot is
 optional: missing it just makes the dishes endpoint return 503 with a
 remediation message, not a startup failure.
 
@@ -351,7 +352,7 @@ remediation message, not a startup failure.
   \item \textbf{Recipe index}: \texttt{public/recipes.json}
         (1.1~MB), produced at build time by
         \texttt{datasets/scripts/build\_recipes.py} from
-        \texttt{IndianFoodDatasetCSV.csv} (16{,}524 rows). The build
+        \texttt{IndianFoodDatasetCSV.csv} (6{,}871 recipes). The build
         aliases 107 YOLO classes against ingredient strings, parses
         instructions into timed steps, enforces an ASCII filter, and
         caps the output at 450 recipes ranked by detector coverage.
@@ -359,9 +360,9 @@ remediation message, not a startup failure.
         row matched from \texttt{Indian\_Food\_Nutrition\_Processed.csv}
         (1{,}014 dishes, 1{,}381 variants).
   \item \textbf{Class manifest}:
-        \texttt{datasets/processed/class\_manifest.json} enumerates
-        1{,}349 canonical Indian ingredient synonyms used by the
-        recipe build.
+        \texttt{datasets/processed/class\_manifest.json} lists the
+        ingredient training classes and the Indian dish vocabulary
+        used by the recipe build.
   \item \textbf{Sample CGM data}:
         \texttt{public/sample-cgm.csv} (672 LibreView-format points
         spanning seven days) generated by
@@ -375,7 +376,7 @@ remediation message, not a startup failure.
         + macronutrient composition) from PhysioNet.
 \end{itemize}
 
-Fig.~\ref{fig:datasets} summarises the recipe index and the
+Fig.~\ref{fig:datasets} summarizes the recipe index and the
 nutrition dataset. The index is predominantly vegetarian (375 of
 450), spans regional cuisines, and has a median total cook time of
 40~minutes.
@@ -404,7 +405,7 @@ the figure PNGs this report embeds.
 \section{Page Walkthrough}
 \label{sec:pages}
 
-Table~\ref{tab:pages} summarises the implemented behaviour of each
+Table~\ref{tab:pages} summarizes the implemented behavior of each
 route. Every row is backed by code on \texttt{main}, not a mockup.
 Fig.~\ref{fig:overview} shows four of these pages in the running
 application.
@@ -416,7 +417,7 @@ application.
 \footnotesize
 \begin{tabularx}{\textwidth}{l l X}
 \toprule
-\textbf{Route} & \textbf{Page} & \textbf{Behaviour} \\
+\textbf{Route} & \textbf{Page} & \textbf{Behavior} \\
 \midrule
 \texttt{/scan}    & Fridge scan  & Live camera with on-device sharpness and
                                  light checks (\texttt{quality.ts}) + an
@@ -427,7 +428,8 @@ application.
                                  returned YOLOv11m bounding boxes over
                                  the captured shot. ``Skip to recipes''
                                  button on the same page replicates the
-                                 Lazy-Mode flow for retroactive users. \\
+                                 Lazy-Mode flow for users who did not
+                                 enable it. \\
 \texttt{/pantry}  & Pantry       & Editable quantities; an SVG graph
                                  linking pantry ingredients to dishes
                                  they can make and the nutrients they
@@ -436,13 +438,13 @@ application.
                                  across dishes the pantry can make
                                  (from the dish nutrition CSV);
                                  a shopping list with Copy / Share /
-                                 Export~.txt / Clear and deep links to
+                                 Export~.txt / Clear and search links to
                                  BigBasket, Blinkit, and Zepto. \\
 \texttt{/recipes} & Recipes      & Match-ranked grid using
                                  \texttt{rankRecipes} (pantry coverage
                                  + family fit + speed). Nutrition chip
                                  filters (\(\geq\)20~g protein,
-                                 \(\leq\)400~kcal, \(\geq\)5~g fibre,
+                                 \(\leq\)400~kcal, \(\geq\)5~g fiber,
                                  \(\leq\)300~mg sodium, \(\leq\)5~g sugar),
                                  sort by any nutrient, per-serving kcal
                                  strip on every card, per-member
@@ -451,7 +453,7 @@ application.
 \texttt{/family}  & Family       & Disease / BP / heart-rate inputs per
                                  member; per-plate and whole-family
                                  kcal + macro rollups computed from
-                                 per-unit nutrition normalised from the
+                                 per-unit nutrition normalized from the
                                  dish CSV (100~g bowl / 100~ml cup /
                                  1-piece roti). \\
 \texttt{/plan}    & Weekly plan  & 7 days $\times$ 3 slots filled via
@@ -475,9 +477,9 @@ application.
                                  recipe being cooked. \\
 \texttt{/health}  & Health       & Logs BP + HR readings with an ACC/AHA
                                  category; accepts a CGM CSV (LibreView
-                                 or Dexcom) and renders the ADA 2020
-                                 metric suite with a 70--180 mg/dL
-                                 in-range band; a Personalised Glycemic
+                                 or Dexcom) and renders the consensus
+                                 CGM metrics with a 70--180 mg/dL
+                                 in-range band; a Personalized Glycemic
                                  Model card showing each member's GSI
                                  and the meals it is based on. \\
 \bottomrule
@@ -510,7 +512,7 @@ found in Indian kitchens (tomato, onion, paneer, milk, spinach,
 green chilli, ginger, garlic, potato, cauliflower, carrot, okra,
 lemon, yoghurt, ghee, butter, eggs, coriander leaves, curry leaves,
 methi leaves). The initial target is $\geq$150 photographs per class
-in realistic household lighting with a 80/20 train/val split.
+in realistic household lighting with an 80/20 train/val split.
 
 The detector served at inference time is a separate YOLOv11m model
 fine-tuned from COCO on 107 pantry classes
@@ -523,8 +525,8 @@ captured, the two-stage configuration can only be tested on IF20
 itself (\S\ref{sec:training}-D).
 
 The on-device quality gate from \texttt{src/lib/quality.ts}
-(brightness mean, Laplacian sharpness, resolution check) is retained
-as a pre-filter -- an element absent from
+(mean luminance and a gradient-based sharpness score computed on a
+downscaled frame) is retained as a pre-filter -- an element absent from
 \cite{redmon2016yolo,foodnet2017,indianfood10,yolov11indian2025}.
 
 \subsection{Nutrition-Aware Ranking}
@@ -558,7 +560,7 @@ nutrition chips and pantry coverage.}
 The user-facing nutrition filter chips (\S\ref{sec:pages},
 \texttt{/recipes}) and six sort modes (\textit{Best match},
 \textit{Quickest}, \textit{Lowest calories}, \textit{Highest
-protein}, \textit{Highest fibre}, \textit{Lowest sodium}) extend the
+protein}, \textit{Highest fiber}, \textit{Lowest sodium}) extend the
 same ranker without altering the underlying score.
 
 \subsection{Set-Based ``Lazy Mode''}
@@ -573,13 +575,14 @@ the ranked recipe grid. The preference is persisted in
 \subsection{Portion Reporting (no reference object required)}
 
 Rather than monocular volume estimation
-(explicitly discouraged by~\cite{gao2018bsn}), AHAAR adopts a
-standardised reporting convention: 100~g = 1~bowl, 100~ml = 1~cup, and
+(which~\cite{gao2018bsn} found unreliable without depth sensing or
+a reference object), AHAAR adopts a
+standardized reporting convention: 100~g = 1~bowl, 100~ml = 1~cup, and
 one piece per roti. These are applied uniformly across the Family
 portion rollups and are the basis of the per-member \texttt{Macros}
 totals and the household-wide dinner totals. A future iteration will
-add an optional reference-coin affordance; the current honest
-reporting is sufficient for the application's cooking guidance role.
+add an optional reference-coin affordance; the current convention is
+sufficient for the application's cooking-guidance role.
 Fig.~\ref{fig:family} shows the resulting per-member plates on the
 Family page; each member's condition and latest blood-pressure
 reading adjust the portions.
@@ -597,15 +600,17 @@ roti, rice, dal and sabzi portions and per-plate kcal and macros.}
 
 \texttt{datasets/scripts/build\_recipes.py} loads
 \texttt{Indian\_Food\_Nutrition\_Processed.csv} (1{,}014 dishes), indexes
-each row under every parenthesised Hindi-English variant (yielding
+each row under every parenthesized Hindi-English variant (yielding
 1{,}381 keys so \textit{Spinach paneer (Palak paneer)} is searchable as
 either), and matches recipe names using an \emph{exact
 $\rightarrow$ substring $\rightarrow$ content-token-overlap} cascade
-with a stop-word filter and Hindi spelling-drift normalisation
+with a stop-word filter and Hindi spelling-drift normalization
 (e.g.\ \texttt{rajmah} $\rightarrow$ \texttt{rajma}). On a 15-dish
-sanity test the matcher resolves 14 of 15 common Indian dishes
-(including Palak Paneer, Rajma, Aloo Gobi, Dal Makhani); the one
-miss (Chole Bhature) is not present in the source CSV. The matched
+sanity test of common Indian dishes the matcher resolves 13,
+including Palak Paneer, Rajma, Aloo Gobi and Dal Makhani. Of the two
+misses, Chole Bhature has no combined entry in the source CSV (only
+Bhatura), and Chana Masala is listed as \textit{Safed channa curry},
+a spelling the normalizer does not yet bridge. The matched
 nutrition also drives the per-member advice on the Health page
 (Fig.~\ref{fig:health}).
 
@@ -614,21 +619,22 @@ nutrition also drives the per-member advice on the Health page
 \includegraphics[width=\columnwidth]{figures/ahaar_health.png}
 \caption{Health page: per-member nutrition-aware advice for the
 sample pantry, with condition-specific targets (sodium for
-hypertension, free sugar and fibre for pre-diabetes).}
+hypertension, free sugar and fiber for pre-diabetes).}
 \label{fig:health}
 \end{figure}
 
-\subsection{CGM-Aware Personalisation}
+\subsection{CGM-Aware Personalization}
 
 The \texttt{/health} page accepts CGM exports from Abbott LibreView,
 Dexcom Clarity, and any generic CSV with a time + glucose column.
 The parser (\texttt{src/lib/cgm.ts}) auto-detects the header row,
-handles both ISO and Indian-locale timestamps, and rejects
-non-physiological values. Metrics follow the ADA 2020 consensus:
+handles both ISO and Indian-locale timestamps, and rejects readings
+outside 20--600\,mg/dL. Metrics follow the international consensus
+on CGM data interpretation~\cite{battelino2019tir}:
 \begin{itemize}
   \item Mean glucose, standard deviation, CV\%.
   \item GMI (``estimated A1c'') = \(3.31 + 0.02392 \times \bar{g}\),
-        per Bergenstal \emph{et al.}\ 2018.
+        per Bergenstal \emph{et al.}~\cite{bergenstal2018gmi}.
   \item Time-in-Range (70--180\,mg/dL), Time-Above-Range ($>$180),
         Time-Below-Range ($<$70).
   \item Hyper/hypo \emph{event} counts (contiguous out-of-range
@@ -640,17 +646,17 @@ sample trace.
 \begin{figure}[!tb]
 \centering
 \includegraphics[width=\columnwidth]{figures/ahaar_cgm.png}
-\caption{CGM dashboard: ADA 2020 metrics (Time-in-Range 99\%, GMI
+\caption{CGM dashboard: consensus metrics (Time-in-Range 99\%, GMI
 5.8\%) and a seven-day synthetic glucose trace with the 70--180~mg/dL
 band.}
 \label{fig:cgm}
 \end{figure}
 
-The personalisation layer closes the loop: for every meal logged on
+The personalization layer closes the loop: for every meal logged on
 \texttt{/cook} that falls inside a member's CGM window,
 \texttt{src/lib/glycemic.ts} computes a 2-hour incremental AUC over
 baseline, divides by an effective-carbohydrate quantity
-(\(\mathrm{ce} = \mathrm{carbs} + 0.5\,\mathrm{sugar} - 0.3\,\mathrm{fibre}\)),
+(\(\mathrm{ce} = \mathrm{carbs} + 0.5\,\mathrm{sugar} - 0.3\,\mathrm{fiber}\)),
 and takes the median across logged meals as the member's
 \textit{Glycemic Sensitivity Index}:
 \begin{equation}
@@ -662,7 +668,7 @@ For an unseen recipe, the predicted spike is
 quantity multiplied by a population baseline
 (\(\mathrm{GSI_{pop}} = 1.5\,\mathrm{mg/dL\,h/g}\)), and bucketed
 into Low / Medium / High impact bands rendered as a chip on every
-Recipes card. The Personalised Glycemic Model card on
+Recipes card. The Personalized Glycemic Model card on
 \texttt{/health} exposes the raw ratios (iAUC and ce) for every
 contributing meal so the user can audit the learned signal.
 
@@ -692,7 +698,7 @@ of the frame.
 
 A YOLOv11m model (20.1\,M parameters) was fine-tuned from COCO
 weights for 50 epochs at $640\times640$, batch 16, with the
-optimiser chosen automatically by Ultralytics (AdamW,
+optimizer chosen automatically by Ultralytics (AdamW,
 $\mathrm{lr}=4.17\times10^{-4}$), early-stopping patience 15 and seed
 42. Training ran for the full 50 epochs on a laptop RTX~3050 (6\,GB)
 and took 17.1\,h.
@@ -702,7 +708,7 @@ and took 17.1\,h.
 \begin{enumerate}
   \item The labels are \emph{classification-grade}: each image has a
         single box spanning almost the whole frame, so mAP measures
-        agreement with an image-level label, not localisation. This
+        agreement with an image-level label, not localization. This
         is visible in the results: mAP@50 and mAP@50:95 are
         identical (0.988), because any correct prediction overlaps a
         95\%-of-frame box almost perfectly. Ingredient-level
@@ -723,7 +729,7 @@ and took 17.1\,h.
 
 \subsection{Results}
 
-Table~\ref{tab:results} summarises the 20-class model on the
+Table~\ref{tab:results} summarizes the 20-class model on the
 validation split. Precision (0.974) is higher than recall (0.955):
 when the model is unsure it tends to miss a dish rather than name
 the wrong one.
@@ -760,9 +766,9 @@ recall 0.85).
 
 \textbf{Confusions} (Fig.~\ref{fig:confusion}) are few and
 plausible: 7\% of butter-naan images are predicted as chapati, and 5\%
-of kulfi images as chapati. The largest entries in the
-\emph{background} column are for chapati and pav bhaji (0.11 each),
-i.e.\ extra boxes on images that already carry a correct one.
+of kulfi images as chapati. Among false-positive boxes (the
+\emph{background} column), chapati and pav bhaji account for the
+largest shares, 11\% each.
 
 \textbf{Training dynamics} (Fig.~\ref{fig:curves}): validation mAP@50
 passes 0.95 by epoch 14 and plateaus near 0.985 from epoch 30. The
@@ -781,9 +787,9 @@ descending. All twenty classes are $\geq 0.958$.}
 \begin{figure}[!tb]
 \centering
 \includegraphics[width=\columnwidth]{figures/ahaar_confusion.png}
-\caption{Normalised confusion matrix (columns: true class; rows:
-predicted). The \emph{background} column counts predictions on
-images with no matching ground truth.}
+\caption{Normalized confusion matrix (columns: true class; rows:
+predicted). The \emph{background} column shows how false-positive
+boxes, which match no ground truth, are distributed across classes.}
 \label{fig:confusion}
 \end{figure}
 
@@ -846,15 +852,14 @@ about 17\,h on the available hardware.
         for the single-stage and two-stage configurations. Target: the two-stage model exceeds the
         91.8\% mAP@50 reported by~\cite{indianfood10} on
         IndianFood10, demonstrating that the ingredient-level task
-        is tractable and that two-stage transfer generalises.
+        is tractable and that two-stage transfer generalizes.
   \item \textbf{Recipe retrieval:} Recall@1 and Recall@5 for a
         held-out 50-prompt query set (``I have X, Y, Z -- what
         can I cook?''), scored by the same \texttt{rankRecipes}
         used in production.
   \item \textbf{Nutrition enrichment:} coverage (fraction of recipes
         carrying a matched nutrition row -- currently 79\%) and
-        hit-rate on a 15-dish gold-standard sanity test (currently
-        14/15).
+        hit-rate on a 15-dish sanity test (currently 13/15).
   \item \textbf{CGM metrics:} agreement of
         \texttt{src/lib/cgm.ts} with LibreView's own reported
         TIR/TBR/TAR on a real-world export, plus synthetic validation
@@ -872,25 +877,26 @@ about 17\,h on the available hardware.
 \section{Discussion}
 \label{sec:discussion}
 
-AHAAR deliberately refuses two tempting shortcuts: (i) relying on an
-off-the-shelf Indian food detector trained on plated meals, and
+AHAAR deliberately avoids two tempting shortcuts: (i) relying, for
+ingredient detection, on an off-the-shelf Indian food detector trained
+on plated meals, and
 (ii) performing monocular volume estimation without a reference
 object. The first is addressed by the planned AHAAR-Fridge dataset
-and the two-stage transfer pipeline; the second is addressed by the standardised
+and the two-stage transfer pipeline; the second is addressed by the standardized
 reporting convention, which is honest about the limit.
 
 The GSI-based recipe re-ranker is the project's most differentiated
 contribution. It is the point at which AHAAR stops being yet another
-recipe app and becomes a personalised health tool for the Indian
-household. No current product combines Indian cuisine recipe
-retrieval with CGM-driven glycemic personalisation.
+recipe app and becomes a personalized health tool for the Indian
+household. We are not aware of a product that combines Indian-cuisine
+recipe retrieval with CGM-driven glycemic personalization.
 
 \textbf{Threats to validity.} Our CGM evaluation dataset will be
 small ($<$10 users); the GSI learner is illustrative, not clinical.
 We state this limitation explicitly in the on-screen disclaimer, and
 target a larger IRB-supervised study as future work. The rule-based
 family-fit scoring is similarly honest: it draws on well-known
-dietary guidance (DASH for BP, soluble fibre for cholesterol) but is
+dietary guidance (DASH for BP, soluble fiber for cholesterol) but is
 not a substitute for clinical advice.
 
 %====================================================================
@@ -900,15 +906,16 @@ not a substitute for clinical advice.
 We have presented AHAAR, a kitchen assistant for Indian households
 that spans fridge scanning, ingredient detection, pantry management,
 recipe recommendation, per-member portioning, weekly meal planning,
-step-by-step cooking, and CGM-aware health personalisation. Every
-page is backed by real code and real data; every design choice is
-anchored in a peer-reviewed IEEE paper; the training pipeline
-reproduces the reported metrics from a cold clone.
+step-by-step cooking, and CGM-aware health personalization. Every
+page is backed by real code and real data, each major design choice
+is anchored in a peer-reviewed paper, and the training pipeline can
+reproduce the reported metrics from a cold clone once the dataset is
+downloaded.
 
 Future work includes: (i) capturing AHAAR-Fridge, testing the dish
 classifier on household phone photos, repeating the two-stage
 comparison on all twenty IF20 classes, and scaling to 50 classes with
-semi-supervised labelling; (ii) extending the GSI learner to a
+semi-supervised labeling; (ii) extending the GSI learner to a
 regression-based model under IRB supervision on a type-2 diabetic
 cohort; (iii) replacing the substring-based recipe matcher with a
 learned im2recipe-style joint embedding over
