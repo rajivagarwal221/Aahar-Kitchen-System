@@ -1,0 +1,198 @@
+{
+  "run": "yolov11m_if20_pretrain",
+  "weights": "results\\yolov11m_if20_pretrain\\weights\\best.pt",
+  "data": "datasets\\indianfood20.yaml",
+  "map50": 0.9913,
+  "map50_95": 0.9845,
+  "precision": 0.977,
+  "recall": 0.9832,
+  "f1": 0.9801,
+  "per_class": [
+    {
+      "class_id": 0,
+      "name": "biryani",
+      "precision": 0.0,
+      "recall": 0.0,
+      "map50": 0.0,
+      "map50_95": 0.0,
+      "support": 0
+    },
+    {
+      "class_id": 1,
+      "name": "butter_chicken",
+      "precision": 0.0,
+      "recall": 0.0,
+      "map50": 0.0,
+      "map50_95": 0.0,
+      "support": 0
+    },
+    {
+      "class_id": 2,
+      "name": "chapati",
+      "precision": 0.9583,
+      "recall": 0.9988,
+      "map50": 0.9925,
+      "map50_95": 0.9925,
+      "support": 0
+    },
+    {
+      "class_id": 3,
+      "name": "chole_bhature",
+      "precision": 0.9035,
+      "recall": 1.0,
+      "map50": 0.9788,
+      "map50_95": 0.9355,
+      "support": 0
+    },
+    {
+      "class_id": 4,
+      "name": "dal_makhani",
+      "precision": 0.9743,
+      "recall": 1.0,
+      "map50": 0.9921,
+      "map50_95": 0.9921,
+      "support": 0
+    },
+    {
+      "class_id": 5,
+      "name": "dosa",
+      "precision": 0.0,
+      "recall": 0.0,
+      "map50": 0.0,
+      "map50_95": 0.0,
+      "support": 0
+    },
+    {
+      "class_id": 6,
+      "name": "fried_rice",
+      "precision": 0.9933,
+      "recall": 1.0,
+      "map50": 0.995,
+      "map50_95": 0.995,
+      "support": 0
+    },
+    {
+      "class_id": 7,
+      "name": "idli",
+      "precision": 1.0,
+      "recall": 0.9847,
+      "map50": 0.995,
+      "map50_95": 0.9904,
+      "support": 0
+    },
+    {
+      "class_id": 8,
+      "name": "jalebi",
+      "precision": 1.0,
+      "recall": 0.9849,
+      "map50": 0.995,
+      "map50_95": 0.9888,
+      "support": 0
+    },
+    {
+      "class_id": 9,
+      "name": "kofta",
+      "precision": 0.0,
+      "recall": 0.0,
+      "map50": 0.0,
+      "map50_95": 0.0,
+      "support": 0
+    },
+    {
+      "class_id": 10,
+      "name": "naan",
+      "precision": 0.0,
+      "recall": 0.0,
+      "map50": 0.0,
+      "map50_95": 0.0,
+      "support": 0
+    },
+    {
+      "class_id": 11,
+      "name": "pakoda",
+      "precision": 0.0,
+      "recall": 0.0,
+      "map50": 0.0,
+      "map50_95": 0.0,
+      "support": 0
+    },
+    {
+      "class_id": 12,
+      "name": "paneer_tikka",
+      "precision": 0.0,
+      "recall": 0.0,
+      "map50": 0.0,
+      "map50_95": 0.0,
+      "support": 0
+    },
+    {
+      "class_id": 13,
+      "name": "pani_puri",
+      "precision": 0.0,
+      "recall": 0.0,
+      "map50": 0.0,
+      "map50_95": 0.0,
+      "support": 0
+    },
+    {
+      "class_id": 14,
+      "name": "pav_bhaji",
+      "precision": 0.9936,
+      "recall": 0.9286,
+      "map50": 0.9879,
+      "map50_95": 0.9879,
+      "support": 0
+    },
+    {
+      "class_id": 15,
+      "name": "poha",
+      "precision": 0.0,
+      "recall": 0.0,
+      "map50": 0.0,
+      "map50_95": 0.0,
+      "support": 0
+    },
+    {
+      "class_id": 16,
+      "name": "pulao",
+      "precision": 0.0,
+      "recall": 0.0,
+      "map50": 0.0,
+      "map50_95": 0.0,
+      "support": 0
+    },
+    {
+      "class_id": 17,
+      "name": "rasmalai",
+      "precision": 0.0,
+      "recall": 0.0,
+      "map50": 0.0,
+      "map50_95": 0.0,
+      "support": 0
+    },
+    {
+      "class_id": 18,
+      "name": "samosa",
+      "precision": 0.9932,
+      "recall": 0.9688,
+      "map50": 0.9941,
+      "map50_95": 0.9941,
+      "support": 0
+    },
+    {
+      "class_id": 19,
+      "name": "upma",
+      "precision": 0.0,
+      "recall": 0.0,
+      "map50": 0.0,
+      "map50_95": 0.0,
+      "support": 0
+    }
+  ],
+  "parameters_m": 20.07,
+  "weights_mb": 38.65,
+  "latency": {
+    "cpu_ms_per_image": 203.23,
+    "cuda_ms_per_image": 24.82
+  }
+}
