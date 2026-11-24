@@ -77,9 +77,9 @@ household member. We ground every design choice in ten peer-reviewed
 IEEE papers spanning object detection, cross-modal recipe retrieval,
 nutrition-aware recommendation, portion estimation, and
 glucose-driven dietary monitoring, and describe the reproducible
-training pipeline, with a three-cell ablation (YOLOv11m and
-YOLOv11l, with and without two-stage transfer through a 20-class
-Indian food dataset).
+training pipeline behind a 20-class Indian dish classifier
+(YOLOv11m, 0.988 mAP@50 and 0.965 F1 on a 1{,}159-image validation
+split).
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -115,8 +115,8 @@ This report consolidates: (i) the ten IEEE references that anchor
 each AHAAR subsystem; (ii) the implemented system architecture
 (frontend, inference backend, data assets, training pipeline);
 (iii) the proposed methodology for the primary ML contribution
-(two-stage transfer YOLO training with a three-cell ablation, and
-the planned AHAAR-Fridge dataset); (iv) the evaluation protocol that produces the
+(a 20-class YOLOv11m dish classifier, an 8-class pilot ablation,
+and the planned AHAAR-Fridge dataset); (iv) the evaluation protocol that produces the
 paper-cited metrics; and (v) a discussion of novelty, limitations,
 and future work.
 
@@ -331,8 +331,8 @@ forward pass, and exposes the following endpoints:
         box\}}). Uses the 107-class production detector.
   \item \texttt{POST /detect/dishes} (or
         \texttt{POST /detect?model=dishes}) -- same request contract,
-        routed to the 20-class IF20 dish classifier produced by
-        the winning ablation cell (\S\ref{sec:training}).
+        routed to the 20-class IF20 dish classifier trained in
+        \S\ref{sec:training}.
   \item \texttt{GET /health} -- liveness probe reporting both models'
         loaded state and class counts.
 \end{itemize}
@@ -392,7 +392,7 @@ in \texttt{Indian\_Food\_Nutrition\_Processed.csv}.}
 
 \subsection{Training Pipeline}
 See \S\ref{sec:training} for the full protocol. In brief: one YAML
-config per ablation cell (plus one per stage-1 pretrain), driving one \texttt{train.py} wrapper
+config per training run, driving one \texttt{train.py} wrapper
 around \texttt{ultralytics.YOLO.train}; an \texttt{evaluate.py} that
 writes paper-ready \texttt{metrics.json} and \texttt{per\_class.csv}
 plus a measured CPU/CUDA latency; an \texttt{ablate.py} that runs
@@ -513,13 +513,14 @@ methi leaves). The initial target is $\geq$150 photographs per class
 in realistic household lighting with a 80/20 train/val split.
 
 The detector served at inference time is a separate YOLOv11m model
-fine-tuned from COCO on 107 pantry classes (\S\ref{sec:training}-B).
+fine-tuned from COCO on 107 pantry classes
+(\S\ref{sec:training}-B).
 The proposed two-stage transfer path -- COCO $\rightarrow$ a
 20-class Indian food dataset (IF20) $\rightarrow$ AHAAR-Fridge -- is
 encoded as two YAML configs (\texttt{stage1\_if20\_yolov11m.yaml}
 and \texttt{yolov11m\_if20\_pretrain.yaml}). Until AHAAR-Fridge is
-captured, the ablation in \S\ref{sec:training} evaluates the
-transfer step on IF20 itself.
+captured, the two-stage configuration can only be tested on IF20
+itself (\S\ref{sec:training}-D).
 
 The on-device quality gate from \texttt{src/lib/quality.ts}
 (brightness mean, Laplacian sharpness, resolution check) is retained
@@ -666,205 +667,173 @@ Recipes card. The Personalised Glycemic Model card on
 contributing meal so the user can audit the learned signal.
 
 %====================================================================
-\section{Training Protocol and Ablation}
+\section{Dish-Classifier Training and Results}
 \label{sec:training}
 
 The complete training protocol is in \texttt{training/README.md} and
-reproducible from a cold clone of the repository. The pipeline is
-designed so the ablation cells differ only by their YAML config; all
-other hyperparameters are identical.
+is reproducible from a cold clone of the repository: one YAML config
+per run drives \texttt{train.py}, \texttt{evaluate.py} writes
+\texttt{metrics.json}, and \texttt{plot.py} produces the figures
+below.
 
-\subsection{Ablation Design}
+\subsection{Dataset and Protocol}
 
-Table~\ref{tab:ablation-design} lists the planned cells. Each
-``+\,IF20'' cell first trains a stage-1 model on IF20 from COCO
-weights, then fine-tunes from that checkpoint with the first ten
-layers frozen. Three of the four cells were trained and evaluated;
-the YOLOv8m baseline was not rerun on IF20.
+The dish classifier served by \texttt{POST /detect/dishes} is trained
+on a 20-class Indian food image dataset distributed on Kaggle
+(\texttt{theeyeschico/indian-food-classification}), which we refer to
+as IF20. It is a whole-image classification set, not the annotated
+platter dataset of~\cite{indianfood10}, and it includes three
+non-Indian dishes (burger, pizza, momos).
+\texttt{datasets/scripts/\_prepare\_indianfood20.py} pools every
+image of each class, shuffles with seed 42 and holds out 20\% per class
+for validation, giving 4{,}672 training and 1{,}159 validation images
+(28--75 per class). Each image receives one centred box covering 95\%
+of the frame.
 
-\begin{table}[!tb]
-\caption{Ablation design (three of four cells evaluated).}
-\label{tab:ablation-design}
-\centering
-\scriptsize
-\setlength{\tabcolsep}{3pt}
-\begin{tabularx}{\columnwidth}{l l X}
-\toprule
-\textbf{Cell} & \textbf{Config (\texttt{training/configs/})} & \textbf{Purpose} \\
-\midrule
-YOLOv8m baseline  & \texttt{yolov8m\_baseline.yaml}        & Prior-art backbone, no IF20 pretrain (not run on IF20) \\
-YOLOv11m baseline & \texttt{yolov11m\_baseline.yaml}       & Modern backbone, no IF20 pretrain \\
-YOLOv11m + IF20   & \texttt{yolov11m\_if20\_pretrain.yaml} & Value of two-stage transfer \\
-YOLOv11l + IF20   & \texttt{yolov11l\_if20\_pretrain.yaml} & Backbone scale at same data budget \\
-\bottomrule
-\end{tabularx}
-\end{table}
+A YOLOv11m model (20.1\,M parameters) was fine-tuned from COCO
+weights for 50 epochs at $640\times640$, batch 16, with the
+optimiser chosen automatically by Ultralytics (AdamW,
+$\mathrm{lr}=4.17\times10^{-4}$), early-stopping patience 15 and seed
+42. Training ran for the full 50 epochs on a laptop RTX~3050 (6\,GB)
+and took 17.1\,h.
 
 \subsection{Scope Caveat}
 
-The ablation reported below was executed on a 20-class Indian food
-image dataset distributed on Kaggle
-(\texttt{theeyeschico/indian-food-classification}), which we refer
-to as IF20. It is a whole-image classification set, not the
-annotated platter dataset of~\cite{indianfood10}. AHAAR-Fridge, the fridge-interior ingredient
-dataset we scope in \S\ref{sec:fridge}, is not yet captured;
-it is the natural next experimental step. The three cells that
-originally pointed at \texttt{datasets/ahaar-fridge.yaml} were
-retargeted to \texttt{datasets/indianfood20.yaml} so the ablation
-could complete within the project's timeline. Three consequences follow:
-
 \begin{enumerate}
-  \item Because IF20 is distributed as folders of whole dish images
-        and \texttt{datasets/scripts/\_prepare\_indianfood20.py}
-        emits one centred, 95\%-of-frame bounding box per image, the
-        resulting labels are \emph{classification-grade}: each image
-        carries a single ground-truth class spanning almost the whole
-        frame. The mAP numbers in
-        Table~\ref{tab:ablation-results} therefore reflect the
-        detector's ability to agree with image-level labels, not its
-        ability to localise ingredients in cluttered fridge
-        interiors. The 0.99 range is consistent with that framing;
-        comparable detection numbers on ingredient-level
-        AHAAR-Fridge annotations will be lower and are deferred to
-        future work.
-  \item Only eight of the twenty class folders matched the class
-        list used by the preparation script at training time
-        (\emph{chapati, chole\_bhature, dal\_makhani, fried\_rice,
-        idli, jalebi, pav\_bhaji, samosa}), so every number in
-        Table~\ref{tab:ablation-results} and Fig.~\ref{fig:per-class}
-        describes those eight classes. The other twelve appear at
-        0.00 in Fig.~\ref{fig:per-class} because the val split has no
-        samples for them. The class list has since been corrected to
-        the dataset's own twenty folders; retraining on all twenty is
-        future work.
-  \item The production detector served to the AHAAR frontend in
-        \S\ref{sec:architecture} is a separate, larger model
-        trained prior to this study on the merged fruit-vegetable
-        (Kaggle \texttt{kritikseth/fruit-and-vegetable-image-recognition}),
-        Indian spices (Kaggle \texttt{tankitrathaur/indian-spices-images-data})
-        and in-house scraped-ingredient datasets, totalling 107
-        pantry classes. Quantitative evaluation of that model
-        against a held-out ingredient-level benchmark is also
-        deferred.
+  \item The labels are \emph{classification-grade}: each image has a
+        single box spanning almost the whole frame, so mAP measures
+        agreement with an image-level label, not localisation. This
+        is visible in the results: mAP@50 and mAP@50:95 are
+        identical (0.988), because any correct prediction overlaps a
+        95\%-of-frame box almost perfectly. Ingredient-level
+        detection on cluttered fridge interiors (AHAAR-Fridge,
+        \S\ref{sec:fridge}) will be harder and is not yet captured.
+  \item Validation images come from the same Kaggle collection as the
+        training images. Accuracy on household phone photos of
+        home-cooked plates is untested and is likely to be lower.
+  \item The 107-class ingredient detector behind \texttt{POST
+        /detect} is a separate model trained earlier on the merged
+        fruit-vegetable (Kaggle
+        \texttt{kritikseth/fruit-and-vegetable-image-recognition}),
+        Indian spices (Kaggle
+        \texttt{tankitrathaur/indian-spices-images-data}) and
+        in-house scraped-ingredient datasets. Its quantitative
+        evaluation against a held-out benchmark is deferred.
 \end{enumerate}
-
-With these caveats, the IF20 ablation supplies three defensible
-observations: whether two-stage transfer through a culturally-matched
-source improves modern-backbone performance on Indian-food targets,
-whether backbone scale (v11m vs v11l) matters at this data budget,
-and how latency and parameter count trade off across the
-configurations.
-
-\subsection{Metrics}
-
-\texttt{training/evaluate.py} emits a \texttt{metrics.json} per run
-containing:
-\begin{itemize}
-  \item mAP@50, mAP@50:95, overall precision, recall, and F1.
-  \item A \texttt{per\_class} array with precision, recall,
-        mAP@50, mAP@50:95, and support per class.
-  \item Measured median latency per image (100 warm + 300 timed)
-        on CPU and, when available, CUDA.
-  \item Parameter count (M) and weights size (MB).
-\end{itemize}
-After every cell, \texttt{ablate.py} re-aggregates these into a
-single \texttt{results/ablation.csv} which is the source for
-Table~\ref{tab:ablation-results}.
 
 \subsection{Results}
 
-Table~\ref{tab:ablation-results} reports the measured values from the
-three evaluated cells, run on the IF20 val split as described in the
-scope caveat above. All three cells use the same optimiser (AdamW,
-auto), image size (640), batch size (16 for m-sized backbones, 8 for
-l-sized), and seed (42). The \texttt{yolov8m\_baseline} cell is omitted
-from the table because its training was retargeted to the
-pipeline-smoke dataset earlier in the project and was not rerun
-against IF20.
+Table~\ref{tab:results} summarises the 20-class model on the
+validation split. Precision (0.974) is higher than recall (0.955):
+when the model is unsure it tends to miss a dish rather than name
+the wrong one.
 
 \begin{table}[!tb]
-\caption{IF20 val-split ablation results. P = precision, R = recall.
-Latency is median ms/image over 300 timed inferences on a CUDA
-GeForce RTX~3050 6GB.}
-\label{tab:ablation-results}
+\caption{YOLOv11m dish classifier on the IF20 validation split
+(20 classes, 1{,}159 images).}
+\label{tab:results}
 \centering
-\scriptsize
-\setlength{\tabcolsep}{2.5pt}
-\begin{tabular}{lrrrrrrr}
+\footnotesize
+\begin{tabular}{lr}
 \toprule
-\textbf{Run} & \textbf{mAP50} & \textbf{mAP50:95} & \textbf{P} & \textbf{R} & \textbf{F1} & \textbf{M} & \textbf{ms} \\
+\textbf{Metric} & \textbf{Value} \\
 \midrule
-v11m (baseline) & 0.978 & 0.974 & 0.944 & 0.959 & 0.951 & 20.1 & 25.5 \\
-v11m + IF20     & \textbf{0.991} & 0.985 & \textbf{0.977} & \textbf{0.983} & \textbf{0.980} & 20.1 & 24.8 \\
-v11l + IF20     & 0.991 & \textbf{0.985} & 0.974 & 0.957 & 0.965 & 25.3 & 109.5 \\
+mAP@50                 & 0.988 \\
+mAP@50:95              & 0.988 \\
+Precision / Recall     & 0.974 / 0.955 \\
+F1                     & 0.965 \\
+Parameters / weights   & 20.1\,M / 38.7\,MB \\
+CPU latency (median)   & 233\,ms / image \\
+GPU latency (median)   & 26--75\,ms / image$^{\dagger}$ \\
 \bottomrule
 \end{tabular}
-\\
-\vspace{2pt}
-{\scriptsize M = parameters (millions); ms = median CUDA latency per image.}
+\\[2pt]
+{\scriptsize $^{\dagger}$RTX~3050 6\,GB laptop: 26.2\,ms measured by
+\texttt{promote.py}, 74.9\,ms by \texttt{evaluate.py} in a separate
+session; we report the range.}
 \end{table}
 
-Three observations follow. First, two-stage transfer through IF20
-yields the best overall result at the m-sized backbone: adding the
-IF20 pretrain step lifts F1 from 0.951 to 0.980 and precision from
-0.944 to 0.977 at essentially no latency cost (24.8~ms vs 25.5~ms).
-Second, scaling the backbone from v11m to v11l does not improve
-mAP@50:95 at this data budget (0.985 for both, with the m-size
-winning on P/R/F1); the larger model is 34\% slower per image on CPU
-(272 vs 203~ms) and $4.4\times$ slower on the RTX~3050 (109.5 vs
-24.8~ms), which makes v11m+IF20 the Pareto-dominant choice for
-AHAAR's serving target (Fig.~\ref{fig:accuracy-latency}). Third, all three numbers sit
-in the 0.95--0.99 range, which the scope caveat predicts: the IF20
-labels are whole-image proxies and agreement with those labels is
-classification-grade. We report the values honestly without claiming
-they reflect fine-grained ingredient-level detection accuracy.
+\textbf{Per class} (Fig.~\ref{fig:per-class}), all twenty dishes
+reach mAP@50 $\geq 0.958$ and twelve reach $\geq 0.99$. The weakest
+are kulfi (0.958, recall 0.88), samosa (0.969) and butter naan (0.975,
+recall 0.85).
 
-\begin{figure}[!tb]
-\centering
-\includegraphics[width=\columnwidth]{figures/ahaar_accuracy_latency.png}
-\caption{Accuracy vs.\ latency across the three evaluated cells
-(bubble area $\propto$ parameter count). YOLOv11m + IF20 pretrain
-reaches the highest F1 (0.980) at the lowest latency (24.8~ms).}
-\label{fig:accuracy-latency}
-\end{figure}
+\textbf{Confusions} (Fig.~\ref{fig:confusion}) are few and
+plausible: 7\% of butter-naan images are predicted as chapati, and 5\%
+of kulfi images as chapati. The largest entries in the
+\emph{background} column are for chapati and pav bhaji (0.11 each),
+i.e.\ extra boxes on images that already carry a correct one.
 
-\subsection{Figures}
-
-\texttt{training/plot.py} generates the training figures at 180\,DPI:
-\textbf{(i)} the ablation bar chart comparison,
-\textbf{(ii)} per-class mAP@50 sorted descending for the winning cell,
-and
-\textbf{(iii)} loss + mAP across epochs.
-Figures~\ref{fig:ablation-bars}, \ref{fig:per-class} and \ref{fig:curves}
-embed the outputs for the winning YOLOv11m + IF20 cell.
-
-\begin{figure}[!tb]
-\centering
-\includegraphics[width=\columnwidth]{figures/ablation_bars.png}
-\caption{Ablation bar chart: mAP@50, mAP@50:95, and F1 per run.
-YOLOv11m + IF20 pretrain is the Pareto-dominant configuration.}
-\label{fig:ablation-bars}
-\end{figure}
+\textbf{Training dynamics} (Fig.~\ref{fig:curves}): validation mAP@50
+passes 0.95 by epoch 14 and plateaus near 0.985 from epoch 30. The
+step drop in training loss at epoch 41 is Ultralytics switching off
+mosaic augmentation for the final ten epochs. Validation loss tracks
+training loss throughout, with no sign of overfitting.
 
 \begin{figure}[!tb]
 \centering
 \includegraphics[width=\columnwidth]{figures/ahaar_per_class_bars.png}
-\caption{Per-class mAP@50 on the IF20 val split for the winning
-YOLOv11m + IF20 pretrain cell, sorted descending. Only the eight
-classes with images were trained and evaluated; the twelve at 0.00
-had no samples (see \S\ref{sec:training}-B).}
+\caption{Per-class mAP@50 on the IF20 validation split, sorted
+descending. All twenty classes are $\geq 0.958$.}
 \label{fig:per-class}
 \end{figure}
 
 \begin{figure}[!tb]
 \centering
+\includegraphics[width=\columnwidth]{figures/ahaar_confusion.png}
+\caption{Normalised confusion matrix (columns: true class; rows:
+predicted). The \emph{background} column counts predictions on
+images with no matching ground truth.}
+\label{fig:confusion}
+\end{figure}
+
+\begin{figure}[!tb]
+\centering
 \includegraphics[width=\columnwidth]{figures/ahaar_training_curves.png}
-\caption{Training curves for the winning cell. Left: box loss on
-train and val splits. Right: mAP@50 and mAP@50:95 on the val split.
-The run was configured for 50 epochs and ended after about 20, when
-early stopping (patience 15) found no further improvement.}
+\caption{Training curves over 50 epochs. Left: box loss on the
+training and validation splits. Right: validation mAP@50 and
+mAP@50:95.}
 \label{fig:curves}
 \end{figure}
+
+\subsection{Pilot Ablation (8-class subset)}
+
+Before the class list was corrected, an earlier version of the
+preparation script matched only eight of the twenty folders
+(chapati, chole bhature, dal makhani, fried rice, idli, jalebi, pav
+bhaji, samosa). Three configurations were trained on that 8-class
+subset (Table~\ref{tab:pilot}). These numbers are not comparable with
+Table~\ref{tab:results}, which covers all twenty classes.
+
+\begin{table}[!tb]
+\caption{Pilot ablation on the 8-class subset. M = parameters
+(millions); GPU = median CUDA ms/image.}
+\label{tab:pilot}
+\centering
+\scriptsize
+\setlength{\tabcolsep}{2.5pt}
+\begin{tabular}{lrrrrrr}
+\toprule
+\textbf{Run} & \textbf{mAP50} & \textbf{P} & \textbf{R} & \textbf{F1} & \textbf{M} & \textbf{GPU} \\
+\midrule
+v11m             & 0.978 & 0.944 & 0.959 & 0.951 & 20.1 & 25.5 \\
+v11m, two-stage  & 0.991 & 0.977 & 0.983 & 0.980 & 20.1 & 24.8 \\
+v11l, two-stage  & 0.991 & 0.974 & 0.957 & 0.965 & 25.3 & 109.5 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+In the two-stage runs, stage~1 trains on the subset from COCO
+weights and stage~2 fine-tunes on the \emph{same} subset with the
+first ten layers frozen. The gain from 0.951 to 0.980 F1 therefore
+reflects additional training, not transfer from a different
+domain; a true transfer test requires AHAAR-Fridge as the stage-2
+target. The pilot does show that the larger v11l backbone gives no
+accuracy benefit at this data size while running $4.4\times$ slower
+on the GPU, which is why the served model is v11m. Repeating the
+two-stage comparison on all twenty classes was not completed: the
+stage-1 run was stopped by an out-of-memory error, and each run takes
+about 17\,h on the available hardware.
 
 
 %====================================================================
@@ -874,7 +843,7 @@ early stopping (patience 15) found no further improvement.}
 \begin{itemize}
   \item \textbf{Detection:} mAP@50, mAP@50:95, per-class precision
         and recall on the AHAAR-Fridge val split once it is captured,
-        for every ablation cell. Target: cell 3 (YOLOv11m + IF20 pretrain) exceeds the
+        for the single-stage and two-stage configurations. Target: the two-stage model exceeds the
         91.8\% mAP@50 reported by~\cite{indianfood10} on
         IndianFood10, demonstrating that the ingredient-level task
         is tractable and that two-stage transfer generalises.
@@ -936,8 +905,9 @@ page is backed by real code and real data; every design choice is
 anchored in a peer-reviewed IEEE paper; the training pipeline
 reproduces the reported metrics from a cold clone.
 
-Future work includes: (i) capturing AHAAR-Fridge, retraining the
-ablation on all twenty IF20 classes, and scaling to 50 classes with
+Future work includes: (i) capturing AHAAR-Fridge, testing the dish
+classifier on household phone photos, repeating the two-stage
+comparison on all twenty IF20 classes, and scaling to 50 classes with
 semi-supervised labelling; (ii) extending the GSI learner to a
 regression-based model under IRB supervision on a type-2 diabetic
 cohort; (iii) replacing the substring-based recipe matcher with a
