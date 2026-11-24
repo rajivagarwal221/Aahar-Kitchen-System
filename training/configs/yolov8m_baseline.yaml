@@ -16,4 +16,5 @@ device: auto                # 'auto' resolves to cuda:0 if available, else cpu
 project: results
 name: yolov8m_baseline      # writes results/yolov8m_baseline/weights/best.pt
 amp: true                   # mixed precision
-cache: ram                  # keep the 20-class dataset in RAM for speed
+cache: false                # RAM caching ran out of memory on a 16 GB Windows laptop
+workers: 4

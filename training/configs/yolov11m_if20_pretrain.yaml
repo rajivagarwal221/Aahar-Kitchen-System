@@ -20,5 +20,6 @@ device: auto
 project: results
 name: yolov11m_if20_pretrain
 amp: true
-cache: ram
+cache: false                # RAM caching ran out of memory on a 16 GB Windows laptop
+workers: 4
 freeze: 10                  # freeze first 10 backbone layers during fine-tune
