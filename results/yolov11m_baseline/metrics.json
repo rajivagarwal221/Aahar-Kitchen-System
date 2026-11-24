@@ -1,0 +1,198 @@
+{
+  "run": "yolov11m_baseline",
+  "weights": "results\\yolov11m_baseline\\weights\\best.pt",
+  "data": "datasets\\indianfood20.yaml",
+  "map50": 0.9879,
+  "map50_95": 0.9879,
+  "precision": 0.9744,
+  "recall": 0.9549,
+  "f1": 0.9646,
+  "per_class": [
+    {
+      "class_id": 0,
+      "name": "burger",
+      "precision": 0.9974,
+      "recall": 0.9848,
+      "map50": 0.9944,
+      "map50_95": 0.9944,
+      "support": 0
+    },
+    {
+      "class_id": 1,
+      "name": "butter_naan",
+      "precision": 0.9362,
+      "recall": 0.8525,
+      "map50": 0.9754,
+      "map50_95": 0.9754,
+      "support": 0
+    },
+    {
+      "class_id": 2,
+      "name": "chai",
+      "precision": 0.9649,
+      "recall": 0.9853,
+      "map50": 0.9827,
+      "map50_95": 0.9827,
+      "support": 0
+    },
+    {
+      "class_id": 3,
+      "name": "chapati",
+      "precision": 0.9104,
+      "recall": 0.9383,
+      "map50": 0.9811,
+      "map50_95": 0.9811,
+      "support": 0
+    },
+    {
+      "class_id": 4,
+      "name": "chole_bhature",
+      "precision": 0.9938,
+      "recall": 0.9733,
+      "map50": 0.9946,
+      "map50_95": 0.9946,
+      "support": 0
+    },
+    {
+      "class_id": 5,
+      "name": "dal_makhani",
+      "precision": 0.97,
+      "recall": 0.9322,
+      "map50": 0.9927,
+      "map50_95": 0.9927,
+      "support": 0
+    },
+    {
+      "class_id": 6,
+      "name": "dhokla",
+      "precision": 0.9962,
+      "recall": 0.9796,
+      "map50": 0.9942,
+      "map50_95": 0.9942,
+      "support": 0
+    },
+    {
+      "class_id": 7,
+      "name": "fried_rice",
+      "precision": 0.9676,
+      "recall": 1.0,
+      "map50": 0.995,
+      "map50_95": 0.995,
+      "support": 0
+    },
+    {
+      "class_id": 8,
+      "name": "idli",
+      "precision": 1.0,
+      "recall": 0.9373,
+      "map50": 0.9943,
+      "map50_95": 0.9943,
+      "support": 0
+    },
+    {
+      "class_id": 9,
+      "name": "jalebi",
+      "precision": 1.0,
+      "recall": 0.9871,
+      "map50": 0.995,
+      "map50_95": 0.995,
+      "support": 0
+    },
+    {
+      "class_id": 10,
+      "name": "kaathi_rolls",
+      "precision": 0.9427,
+      "recall": 0.9455,
+      "map50": 0.9827,
+      "map50_95": 0.9827,
+      "support": 0
+    },
+    {
+      "class_id": 11,
+      "name": "kadai_paneer",
+      "precision": 0.9841,
+      "recall": 0.9349,
+      "map50": 0.9927,
+      "map50_95": 0.9927,
+      "support": 0
+    },
+    {
+      "class_id": 12,
+      "name": "kulfi",
+      "precision": 0.9731,
+      "recall": 0.881,
+      "map50": 0.9582,
+      "map50_95": 0.9582,
+      "support": 0
+    },
+    {
+      "class_id": 13,
+      "name": "masala_dosa",
+      "precision": 0.9813,
+      "recall": 0.9534,
+      "map50": 0.9893,
+      "map50_95": 0.9893,
+      "support": 0
+    },
+    {
+      "class_id": 14,
+      "name": "momos",
+      "precision": 0.9844,
+      "recall": 0.9883,
+      "map50": 0.9945,
+      "map50_95": 0.9945,
+      "support": 0
+    },
+    {
+      "class_id": 15,
+      "name": "paani_puri",
+      "precision": 0.9834,
+      "recall": 0.9643,
+      "map50": 0.989,
+      "map50_95": 0.989,
+      "support": 0
+    },
+    {
+      "class_id": 16,
+      "name": "pakode",
+      "precision": 0.9995,
+      "recall": 0.9444,
+      "map50": 0.9934,
+      "map50_95": 0.9934,
+      "support": 0
+    },
+    {
+      "class_id": 17,
+      "name": "pav_bhaji",
+      "precision": 0.9832,
+      "recall": 1.0,
+      "map50": 0.9948,
+      "map50_95": 0.9948,
+      "support": 0
+    },
+    {
+      "class_id": 18,
+      "name": "pizza",
+      "precision": 0.9817,
+      "recall": 0.9769,
+      "map50": 0.9941,
+      "map50_95": 0.9941,
+      "support": 0
+    },
+    {
+      "class_id": 19,
+      "name": "samosa",
+      "precision": 0.9381,
+      "recall": 0.9388,
+      "map50": 0.9689,
+      "map50_95": 0.9689,
+      "support": 0
+    }
+  ],
+  "parameters_m": 20.07,
+  "weights_mb": 38.65,
+  "latency": {
+    "cpu_ms_per_image": 232.93,
+    "cuda_ms_per_image": 74.9
+  }
+}
