@@ -77,8 +77,8 @@ time, with per-serving nutrition attached to 79\% of recipes. A
 browser-side pipeline computes consensus CGM metrics, and a
 per-member Glycemic Sensitivity Index, learned from logged meals,
 predicts each recipe's glycemic impact. An end-to-end test confirmed
-the scan-to-pantry flow on desktop and phone, and showed that a guard
-using the ingredient detector cuts false brand tags on produce photos
+the scan-to-pantry flow on desktop and phone, and showed that a brand guard,
+now enabled and using the ingredient detector, cuts false brand tags on produce photos
 from 85 of 160 to 1. Design choices are grounded in ten peer-reviewed
 IEEE papers.
 \end{abstract}
@@ -378,8 +378,8 @@ checked against the lists the UI depends on. Endpoints:
 \end{itemize}
 Every detection is returned as \texttt{\{classId, className, label,
 confidence, box, brand\}}, with a base confidence threshold of 0.25
-and NMS IoU 0.45. An additional guard for brand boxes in the merged
-scan is evaluated in \S\ref{sec:e2e}. A display-name map translates the
+and NMS IoU 0.45. In the merged scan, brand boxes also pass a guard
+that uses the ingredient detector as a referee (\S\ref{sec:e2e}). A display-name map translates the
 107 raw ingredient keys (e.g.\ \texttt{toor\_dal},
 \texttt{methi\_leaves}) into friendly labels (``Toor dal'', ``Methi
 (fenugreek) leaves''). Non-image uploads and unknown slot names are
@@ -1214,7 +1214,7 @@ whole frame because the model was trained on whole-image labels.
 \S\ref{sec:crossdata}; the first four are correct, and the last is a
 pav bhaji misread as dal makhani. \textbf{Bottom}: packaged-brand
 slot on loose produce. Every brand tag here is false; struck-through
-grey tags are the ones the guard evaluated below removes, leaving
+grey tags are the ones the brand guard described below removes, leaving
 only the ingredient. No labelled photographs of Indian packs on a
 kitchen counter were available for a positive brand example.}
 \label{fig:threemodels}
@@ -1255,8 +1255,8 @@ stand out:
   \item \textbf{Brand false positives on loose produce.} The
         packaged model fires on vegetables (a carrot returned
         ``Balaji Wafers'' at 62\%), because it was trained without
-        loose produce as background. A guard that addresses this is
-        evaluated below.
+        loose produce as background. The brand guard described
+        below, now enabled in the backend, addresses this.
   \item \textbf{Loose pulses.} Visually similar dals and legumes are
         confused with each other, and a collage of pulses returned
         nothing.
@@ -1270,10 +1270,9 @@ stand out:
 model. With the plain 0.25 threshold, 85 of the 160 photographs
 received at least one invented brand, often at high confidence (a
 carrot as Horlicks at 94\%, an onion as Kissan Jam at 97\%). We
-therefore evaluated a guard that uses the ingredient model, which is
-reliable on produce, as a referee in the merged scan. It is
-implemented on a development branch and is not yet enabled in the
-released backend. A brand box (i)~needs a confidence of
+therefore added a guard that uses the ingredient model, which is
+reliable on produce, as a referee in the merged scan. The guard is
+enabled by default in the released backend. A brand box (i)~needs a confidence of
 at least 0.35; (ii)~is dropped if it overlaps (IoU $>0.3$) a
 fresh-produce detection that the ingredient model makes with
 confidence $\geq 0.5$; and (iii)~if such produce is present elsewhere
