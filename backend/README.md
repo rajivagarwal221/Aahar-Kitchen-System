@@ -67,6 +67,28 @@ runs one model only.
 ]
 ```
 
+## One combined model file (optional)
+
+`training/combine_models.py` packs the three detectors into one ONNX file,
+`aahar_combined.onnx`, that runs all of them in a single forward pass and
+returns one detection list over 186 classes (ingredients 0-106, dishes
+107-126, packaged 127-185; the ranges are stored in the file). Nothing is
+retrained, so detections match the separate models; `--verify IMAGE` checks
+that. Build it in Colab with `notebooks/combine_aahar_models.ipynb`, or locally:
+
+```powershell
+python training/combine_models.py --ingredients backend/best.pt --dishes backend/best_dishes.pt `
+    --packaged backend/best_packaged.pt --out backend/aahar_combined.onnx --verify some_photo.jpg
+```
+
+When the backend finds it (`MODEL_PATH_COMBINED`, `backend/aahar_combined.onnx`,
+`MODEL_URL_COMBINED`, then `huggingface.co/Rajiv221/aahar-combined-detector`), it
+serves every slot from it and skips the separate `.pt` files; `/health` shows
+`"mode": "combined"`. Set `USE_COMBINED=0` to go back to the separate files.
+The API is unchanged. Because the file has a fixed 640x640 input, confidences
+can differ by a few points from the `.pt` models, which pad to the nearest
+multiple of 32 instead.
+
 ## Model resolution
 
 Per slot, the backend tries `MODEL_PATH_<SLOT>`, then `backend/<file>`, then

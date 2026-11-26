@@ -19,6 +19,10 @@ Endpoints:
 
 Optional slots that have no weights are skipped at startup and their endpoints
 return 503. With only best.pt present, POST /detect behaves exactly as before.
+
+If backend/aahar_combined.onnx exists (or downloads from Hugging Face), all three
+models are served from that one file in a single forward pass instead; see
+training/combine_models.py. USE_COMBINED=0 forces the separate files.
 """
 from __future__ import annotations
 
@@ -110,11 +114,93 @@ import numpy as np  # for warm-up
 CONF = float(os.environ.get("CONF", "0.25"))
 IOU  = float(os.environ.get("IOU",  "0.45"))
 
+# --- combined model (all three in one file) -----------------------------------
+# training/combine_models.py packs the three detectors into one ONNX file that
+# runs them in a single forward pass. When it is available the backend serves
+# every slot from it and does not load the separate .pt files.
+# Resolution: MODEL_PATH_COMBINED, backend/aahar_combined.onnx,
+# MODEL_URL_COMBINED, then Hugging Face. USE_COMBINED=0 turns it off.
+COMBINED_FILE = BACKEND_DIR / "aahar_combined.onnx"
+_HF_COMBINED = "https://huggingface.co/Rajiv221/aahar-combined-detector/resolve/main/aahar_combined.onnx"
+
+
+def _resolve_combined() -> str | None:
+    if os.environ.get("USE_COMBINED", "1").strip().lower() in ("0", "false", "no", "off"):
+        return None
+    env_path = os.environ.get("MODEL_PATH_COMBINED")
+    if env_path and Path(env_path).exists():
+        return env_path
+    if COMBINED_FILE.exists():
+        return str(COMBINED_FILE)
+    url = os.environ.get("MODEL_URL_COMBINED") or _HF_COMBINED
+    return str(COMBINED_FILE) if _download(url, COMBINED_FILE) else None
+
+
+class _SlotView:
+    """One original model's share of the combined file: class ids [lo, hi)."""
+    def __init__(self, lo: int, hi: int, names: dict):
+        self.lo, self.hi = lo, hi
+        self.names = {i: names[lo + i] for i in range(hi - lo)}
+
+
+COMBINED = None            # YOLO over the combined ONNX file, or None
+COMBINED_PATH = None
+
+
+def _load_combined():
+    global COMBINED, COMBINED_PATH
+    path = _resolve_combined()
+    if not path:
+        return {}
+    try:
+        import onnxruntime as ort
+        meta = ort.InferenceSession(path, providers=["CPUExecutionProvider"]).get_modelmeta().custom_metadata_map
+        ranges = json.loads(meta["aahar_slots"])
+    except Exception as e:
+        print(f"[model] combined file {path} unusable ({e}); loading the separate models")
+        return {}
+    if "ingredients" not in ranges:
+        print(f"[model] combined file {path} has no ingredients model; loading the separate models")
+        return {}
+    print(f"[model] loading combined model from {path} ({', '.join(ranges)})")
+    m = YOLO(path, task="detect")
+    m.predict(np.zeros((640, 640, 3), dtype=np.uint8), verbose=False)
+    names = m.names
+    COMBINED, COMBINED_PATH = m, path
+    return {slot: _SlotView(lo, hi, names) for slot, (lo, hi) in ranges.items()}
+
+
 # --- load every slot that has weights -----------------------------------------
-MODELS: dict = {}          # slot -> YOLO
+MODELS: dict = {}          # slot -> YOLO (separate files) or _SlotView (combined file)
 CLASS_CHECK: dict = {}     # slot -> "ok" | "mismatch: ..." | "unchecked"
 
+
+def _check_classes(slot: str, m) -> None:
+    # The UI's lists (Pantry ingredients, packaged pantry map) assume a fixed
+    # class order per slot. A model promoted into the wrong slot breaks them.
+    got = S.model_names(m)
+    exp = S.expected_classes(slot)
+    if exp is None:
+        CLASS_CHECK[slot] = "unchecked"
+        print(f"[model] {slot} ready: {len(got)} classes (no repo class list to check against)")
+        return
+    d = S.diff_classes(got, exp)
+    CLASS_CHECK[slot] = "ok" if d is None else f"mismatch: {d}"
+    if d is None:
+        print(f"[model] {slot} ready: {len(got)} classes, match the repo list")
+    else:
+        hint = S.suggest_slot(got)
+        print(f"[model] WARNING: {slot} classes don't match the repo list ({d})."
+              + (f" This looks like a {hint} model: promote it with --as {hint}." if hint else ""))
+
+
+for _slot, _view in _load_combined().items():
+    MODELS[_slot] = _view
+    _check_classes(_slot, _view)
+
 for _slot, _cfg in S.SLOTS.items():
+    if COMBINED is not None:
+        break
     _path = _resolve(_slot)
     if not _path:
         if _cfg["required"]:
@@ -132,28 +218,12 @@ for _slot, _cfg in S.SLOTS.items():
     _m = YOLO(_path)
     _m.predict(np.zeros((640, 640, 3), dtype=np.uint8), verbose=False)
     MODELS[_slot] = _m
-
-    # The UI's lists (Pantry ingredients, packaged pantry map) assume a fixed
-    # class order per slot. A model promoted into the wrong slot breaks them.
-    _got = S.model_names(_m)
-    _exp = S.expected_classes(_slot)
-    if _exp is None:
-        CLASS_CHECK[_slot] = "unchecked"
-        print(f"[model] {_slot} ready: {len(_got)} classes (no repo class list to check against)")
-    else:
-        _d = S.diff_classes(_got, _exp)
-        CLASS_CHECK[_slot] = "ok" if _d is None else f"mismatch: {_d}"
-        if _d is None:
-            print(f"[model] {_slot} ready: {len(_got)} classes, match the repo list")
-        else:
-            _hint = S.suggest_slot(_got)
-            print(f"[model] WARNING: {_slot} classes don't match the repo list ({_d})."
-                  + (f" This looks like a {_hint} model: promote it with --as {_hint}." if _hint else ""))
+    _check_classes(_slot, _m)
 
 PACKAGED_MAP = S.load_packaged_map() if "packaged" in MODELS else {}
 
 # Legacy aliases so code expecting the old globals still works.
-model_ing = MODELS["ingredients"]
+model_ing = MODELS["ingredients"]   # YOLO, or _SlotView in combined mode
 model_dish = MODELS.get("dishes")
 model = model_ing
 
@@ -236,6 +306,9 @@ class Det(BaseModel):
 def health():
     return {
         "status": "ok",
+        # "combined": one file (training/combine_models.py) serves every slot.
+        "mode": "combined" if COMBINED is not None else "separate",
+        "combinedFile": Path(COMBINED_PATH).name if COMBINED_PATH else None,
         "models": {
             slot: {"loaded": slot in MODELS,
                    "classes": len(MODELS[slot].names) if slot in MODELS else 0,
@@ -288,20 +361,37 @@ def _packaged_label(cls: str) -> tuple[str, Optional[str]]:
     return label, info.get("pantry")
 
 
-def _infer(img, slot: str) -> list[Det]:
-    chosen = MODELS[slot]
-    W, H = img.size
-    res = chosen.predict(img, conf=CONF, iou=IOU, verbose=False)[0]
-    out: list[Det] = []
-    if res.boxes is None:
+def _raw(img, slots: list[str]) -> dict[str, list[tuple]]:
+    """slot -> [(x1, y1, x2, y2, conf, class id within slot, class name)].
+    With the combined file this is ONE forward pass for every slot."""
+    out: dict[str, list[tuple]] = {s_: [] for s_ in slots}
+
+    def rows(res):
+        if res.boxes is None:
+            return []
+        return zip(res.boxes.xyxy.cpu().numpy().tolist(), res.boxes.conf.cpu().numpy().tolist(),
+                   res.boxes.cls.cpu().numpy().astype(int).tolist())
+
+    if COMBINED is not None:
+        res = COMBINED.predict(img, conf=CONF, iou=IOU, max_det=900, verbose=False)[0]
+        for (x1, y1, x2, y2), conf, cid in rows(res):
+            for slot in slots:
+                v = MODELS[slot]
+                if v.lo <= cid < v.hi:
+                    out[slot].append((x1, y1, x2, y2, conf, cid - v.lo, v.names[cid - v.lo]))
+                    break
         return out
-    boxes = res.boxes.xyxy.cpu().numpy()
-    confs = res.boxes.conf.cpu().numpy()
-    clses = res.boxes.cls.cpu().numpy().astype(int)
-    for i in range(len(boxes)):
-        x1, y1, x2, y2 = boxes[i].tolist()
-        cid = int(clses[i])
-        raw_name = chosen.names[cid]
+    for slot in slots:
+        m = MODELS[slot]
+        res = m.predict(img, conf=CONF, iou=IOU, verbose=False)[0]
+        out[slot] = [(x1, y1, x2, y2, conf, cid, m.names[cid]) for (x1, y1, x2, y2), conf, cid in rows(res)]
+    return out
+
+
+def _to_dets(img, slot: str, raw: list[tuple]) -> list[Det]:
+    W, H = img.size
+    out: list[Det] = []
+    for i, (x1, y1, x2, y2, conf, cid, raw_name) in enumerate(raw):
         class_name, label, brand = raw_name, display(raw_name), None
         if slot == "packaged":
             label, pantry = _packaged_label(raw_name)
@@ -312,7 +402,7 @@ def _infer(img, slot: str) -> list[Det]:
             classId=cid,
             className=class_name,
             label=label,
-            confidence=float(confs[i]),
+            confidence=float(conf),
             box={
                 "x": max(0.0, x1) / W * 100,
                 "y": max(0.0, y1) / H * 100,
@@ -324,6 +414,10 @@ def _infer(img, slot: str) -> list[Det]:
         ))
     out.sort(key=lambda d: d.confidence, reverse=True)
     return out
+
+
+def _infer(img, slot: str) -> list[Det]:
+    return _to_dets(img, slot, _raw(img, [slot])[slot])
 
 
 def _iou(a: dict, b: dict) -> float:
@@ -338,10 +432,12 @@ def _iou(a: dict, b: dict) -> float:
 def _scan(img) -> list[Det]:
     """Ingredients + packaged, merged. Where a branded pack and an ingredient
     box name the same pantry item in the same place, keep the branded one."""
-    dets = _infer(img, "ingredients")
+    slots = ["ingredients"] + (["packaged"] if "packaged" in MODELS else [])
+    raw = _raw(img, slots)   # one forward pass when the combined file is loaded
+    dets = _to_dets(img, "ingredients", raw["ingredients"])
     if "packaged" not in MODELS:
         return dets
-    packs = _infer(img, "packaged")
+    packs = _to_dets(img, "packaged", raw["packaged"])
     dets = [d for d in dets
             if not any(p.className == d.className and _iou(p.box, d.box) > 0.3 for p in packs)]
     merged = dets + packs
