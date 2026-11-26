@@ -8,10 +8,14 @@
 export type Detection = {
   id: string;
   classId: number;
-  className: string;      // raw, e.g. 'toor_dal'
-  label: string;          // display, e.g. 'Toor dal'
+  className: string;      // pantry key, e.g. 'toor_dal'. For a branded pack it is the
+                          // mapped ingredient ('butter' for Amul butter) or, if none,
+                          // the packaged class ('maggi_noodles').
+  label: string;          // display, e.g. 'Toor dal', 'Amul Butter'
   confidence: number;     // 0..1
   box: { x: number; y: number; w: number; h: number }; // % of original image
+  source?: 'ingredients' | 'dishes' | 'packaged';  // which backend model found it
+  brand?: string;         // packaged class, e.g. 'amul_butter' (packaged hits only)
 };
 
 const DETECT_URL: string =
@@ -24,6 +28,9 @@ async function dataUrlToBlob(src: string): Promise<Blob> {
   return await r.blob();
 }
 
+/** Scan for pantry items. The backend runs the ingredient model and, when
+ * backend/best_packaged.pt is installed, the packaged-brand model too, and
+ * returns one merged list. */
 export async function detectIngredients(
   imageSrc: string,
   onProgress?: (pct: number) => void,

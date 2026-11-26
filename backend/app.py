@@ -1,25 +1,24 @@
 """AHAAR detection backend.
 
-Loads two YOLO models at startup and serves both:
+Serves up to three YOLO models side by side (see backend/slots.py):
 
-    POST /detect?model=ingredients   (default) - 107-class fridge-interior
-                                                  ingredient detector trained
-                                                  on fruit-veg + indian-spices
-                                                  + the group's scraped set.
-                                                  Backs the Scan/Detect/Pantry
-                                                  flow.
-    POST /detect?model=dishes                   - 20-class IndianFood20 plated
-                                                  dish classifier produced by
-                                                  the §VI ablation (best
-                                                  ablation cell).
-    POST /detect/dishes                         - alias for /detect?model=dishes
+    ingredients  backend/best.pt           107-class ingredient detector (required)
+    dishes       backend/best_dishes.pt    20-class IndianFood20 dish model (optional)
+    packaged     backend/best_packaged.pt  59-class branded packaged-food model (optional)
 
-Both models stay resident on the GPU (~100 MB total VRAM). Startup warms
-them with a zero-tensor forward pass each so the first request isn't the
-slow one.
+Endpoints:
 
-Backwards compatible: existing clients that POST /detect with no `model`
-param get the 107-class ingredient detector exactly as before.
+    POST /detect                 Scan: ingredients + packaged (if loaded), merged.
+                                 A packaged hit that maps to a pantry ingredient
+                                 (amul_butter -> butter) is returned under that
+                                 ingredient's className, with the brand attached.
+    POST /detect?model=<slot>    One model only: ingredients | dishes | packaged.
+    POST /detect/<slot>          Same, as a path.
+    GET  /health                 Which slots are loaded, and whether each one's
+                                 classes match the repo's class list.
+
+Optional slots that have no weights are skipped at startup and their endpoints
+return 503. With only best.pt present, POST /detect behaves exactly as before.
 """
 from __future__ import annotations
 
@@ -33,6 +32,10 @@ from typing import List, Optional
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import slots as S  # noqa: E402  (backend/slots.py)
 
 try:
     from ultralytics import YOLO
@@ -70,28 +73,23 @@ def _download(url: str, dst: Path) -> bool:
         return False
 
 
-def _resolve(slot: str, filename: str, hf_default: str | None) -> str | None:
-    """Return a path to a .pt for the given slot, downloading as needed.
-    Resolution order mirrors the single-model version for the ingredients slot;
-    the dishes slot is optional — if no local file and no URL provided, we
-    simply skip loading (the /detect/dishes endpoint returns 503)."""
-    env_path = os.environ.get(f"MODEL_PATH_{slot.upper()}")
-    if slot == "ingredients" and not env_path:
-        env_path = os.environ.get("MODEL_PATH")  # backcompat with the old var
+def _resolve(slot: str) -> str | None:
+    """Return a path to the slot's .pt, downloading as needed.
+    Order: MODEL_PATH_<SLOT>, backend/<file>, MODEL_URL_<SLOT>, MODEL_URL_FALLBACK_<SLOT>.
+    The ingredients slot also honours the old MODEL_PATH / MODEL_URL /
+    MODEL_URL_FALLBACK names and falls back to the Hugging Face default."""
+    up = slot.upper()
+    ing = slot == "ingredients"
+    env_path = os.environ.get(f"MODEL_PATH_{up}") or (os.environ.get("MODEL_PATH") if ing else None)
     if env_path and Path(env_path).exists():
         return env_path
 
-    local = BACKEND_DIR / filename
+    local = BACKEND_DIR / S.SLOTS[slot]["file"]
     if local.exists():
         return str(local)
 
-    url = os.environ.get(f"MODEL_URL_{slot.upper()}") or (hf_default if slot == "ingredients" else None)
-    if slot == "ingredients" and not url:
-        url = os.environ.get("MODEL_URL") or hf_default
-    url_fallback = os.environ.get(f"MODEL_URL_FALLBACK_{slot.upper()}")
-    if slot == "ingredients" and not url_fallback:
-        url_fallback = os.environ.get("MODEL_URL_FALLBACK")
-
+    url = os.environ.get(f"MODEL_URL_{up}") or (os.environ.get("MODEL_URL") or _HF_DEFAULT if ing else None)
+    url_fallback = os.environ.get(f"MODEL_URL_FALLBACK_{up}") or (os.environ.get("MODEL_URL_FALLBACK") if ing else None)
     if url and _download(url, local):
         return str(local)
     if url_fallback and _download(url_fallback, local):
@@ -103,63 +101,52 @@ import numpy as np  # for warm-up
 CONF = float(os.environ.get("CONF", "0.25"))
 IOU  = float(os.environ.get("IOU",  "0.45"))
 
-# --- ingredient detector (required — backend refuses to boot without it) ------
-_ing_path = _resolve("ingredients", "best.pt", _HF_DEFAULT)
-if not _ing_path:
-    raise SystemExit(
-        "\n".join([
-            "[model] Could not resolve the ingredients detector. Options:",
-            "          - Copy a .pt file to backend/best.pt (cheapest),",
-            "          - Set MODEL_URL to a working mirror,",
-            "          - Set MODEL_URL_FALLBACK to a second mirror,",
-            "          - Set MODEL_PATH to an absolute path on disk.",
-            "        See backend/README.md § 'Model resolution' for details.",
-        ])
-    )
-print(f"[model] loading ingredients model from {_ing_path}")
-model_ing = YOLO(_ing_path)
-model_ing.predict(np.zeros((640, 640, 3), dtype=np.uint8), verbose=False)
-print(f"[model] ingredients ready: {len(model_ing.names)} classes")
+# --- load every slot that has weights -----------------------------------------
+MODELS: dict = {}          # slot -> YOLO
+CLASS_CHECK: dict = {}     # slot -> "ok" | "mismatch: ..." | "unchecked"
 
+for _slot, _cfg in S.SLOTS.items():
+    _path = _resolve(_slot)
+    if not _path:
+        if _cfg["required"]:
+            raise SystemExit("\n".join([
+                "[model] Could not resolve the ingredients detector. Options:",
+                "          - Copy a .pt file to backend/best.pt (cheapest),",
+                "          - Set MODEL_URL to a working mirror,",
+                "          - Set MODEL_URL_FALLBACK to a second mirror,",
+                "          - Set MODEL_PATH to an absolute path on disk.",
+                "        See backend/README.md § 'Model resolution' for details.",
+            ]))
+        print(f"[model] {_slot}: no backend/{_cfg['file']}; /detect/{_slot} will 503")
+        continue
+    print(f"[model] loading {_slot} model from {_path}")
+    _m = YOLO(_path)
+    _m.predict(np.zeros((640, 640, 3), dtype=np.uint8), verbose=False)
+    MODELS[_slot] = _m
 
-def _check_ingredient_classes() -> None:
-    """Warn loudly if best.pt's classes differ from src/lib/classNames.ts.
-    The Pantry page offers CLASS_NAMES as the ingredient list, so a different
-    model (e.g. the 20-class dish model promoted into this slot) breaks it.
-    Skipped when the frontend source isn't next to the backend (deployments)."""
-    ts = BACKEND_DIR.parent / "src/lib/classNames.ts"
-    if not ts.exists():
-        return
-    m = re.search(r"CLASS_NAMES[^=]*=\s*\[(.*?)\]\s*as const", ts.read_text(encoding="utf-8"), re.S)
-    if not m:
-        return
-    expected = re.findall(r'"([^"]+)"', m.group(1))
-    names = model_ing.names
-    got = [names[i] for i in sorted(names)] if isinstance(names, dict) else list(names)
-    if got != expected:
-        print("[model] WARNING: ingredients model classes do not match src/lib/classNames.ts "
-              f"({len(got)} vs {len(expected)}). Promote the right checkpoint with "
-              "training/promote.py, or update classNames.ts.")
+    # The UI's lists (Pantry ingredients, packaged pantry map) assume a fixed
+    # class order per slot. A model promoted into the wrong slot breaks them.
+    _got = S.model_names(_m)
+    _exp = S.expected_classes(_slot)
+    if _exp is None:
+        CLASS_CHECK[_slot] = "unchecked"
+        print(f"[model] {_slot} ready: {len(_got)} classes (no repo class list to check against)")
     else:
-        print(f"[model] ingredients classes match src/lib/classNames.ts ({len(got)})")
+        _d = S.diff_classes(_got, _exp)
+        CLASS_CHECK[_slot] = "ok" if _d is None else f"mismatch: {_d}"
+        if _d is None:
+            print(f"[model] {_slot} ready: {len(_got)} classes, match the repo list")
+        else:
+            _hint = S.suggest_slot(_got)
+            print(f"[model] WARNING: {_slot} classes don't match the repo list ({_d})."
+                  + (f" This looks like a {_hint} model: promote it with --as {_hint}." if _hint else ""))
 
+PACKAGED_MAP = S.load_packaged_map() if "packaged" in MODELS else {}
 
-_check_ingredient_classes()
-
-# --- dishes classifier (optional — present only if the IF20 ablation ran) -----
-_dish_path = _resolve("dishes", "best_dishes.pt", None)
-model_dish = None
-if _dish_path:
-    print(f"[model] loading dishes model from {_dish_path}")
-    model_dish = YOLO(_dish_path)
-    model_dish.predict(np.zeros((640, 640, 3), dtype=np.uint8), verbose=False)
-    print(f"[model] dishes ready: {len(model_dish.names)} classes")
-else:
-    print("[model] dishes model not configured; /detect?model=dishes will 503")
-
-# Legacy alias so any code expecting the single `model` global still works.
+# Legacy aliases so code expecting the old globals still works.
+model_ing = MODELS["ingredients"]
+model_dish = MODELS.get("dishes")
 model = model_ing
-MODEL_PATH = _ing_path
 
 # --- display-name mapping (matches src/lib/classNames.ts) ---------------------
 DISPLAY_OVERRIDES = {
@@ -228,49 +215,72 @@ app.add_middleware(
 class Det(BaseModel):
     id: str
     classId: int
-    className: str
+    className: str     # pantry key: ingredient class, or packaged class if unmapped
     label: str
     confidence: float
     box: dict          # {x, y, w, h} in % of original image
+    source: str = "ingredients"   # which slot produced it
+    brand: Optional[str] = None   # packaged class (e.g. 'amul_butter') for packaged hits
+
 
 @app.get("/health")
 def health():
     return {
         "status": "ok",
         "models": {
-            "ingredients": {"loaded": True, "classes": len(model_ing.names)},
-            "dishes": {"loaded": model_dish is not None,
-                       "classes": len(model_dish.names) if model_dish is not None else 0},
+            slot: {"loaded": slot in MODELS,
+                   "classes": len(MODELS[slot].names) if slot in MODELS else 0,
+                   "classCheck": CLASS_CHECK.get(slot)}
+            for slot in S.SLOTS
         },
         # Backwards compat with older clients that only checked top-level `classes`.
         "classes": len(model_ing.names),
     }
 
 
-def _pick(model_name: Optional[str]):
-    """Resolve ?model=... to the loaded YOLO. Default is the ingredients detector."""
-    key = (model_name or "ingredients").strip().lower()
-    if key in ("", "ingredients", "ing", "ingredient"):
-        return model_ing, "ingredients"
-    if key in ("dishes", "dish", "if20"):
-        if model_dish is None:
-            raise HTTPException(503, "The dishes model is not loaded on this backend. "
-                                     "Promote a dishes checkpoint to backend/best_dishes.pt "
-                                     "(see backend/README.md) and restart.")
-        return model_dish, "dishes"
-    raise HTTPException(400, f"Unknown model: {model_name!r}. Use 'ingredients' or 'dishes'.")
+_ALIASES = {
+    "ingredients": "ingredients", "ingredient": "ingredients", "ing": "ingredients",
+    "dishes": "dishes", "dish": "dishes", "if20": "dishes",
+    "packaged": "packaged", "package": "packaged", "brands": "packaged", "brand": "packaged",
+}
 
 
-async def _infer(file: UploadFile, chosen) -> list[Det]:
+def _pick(model_name: Optional[str]) -> str:
+    """Resolve ?model=... to a loaded slot name."""
+    key = _ALIASES.get((model_name or "ingredients").strip().lower())
+    if key is None:
+        raise HTTPException(400, f"Unknown model: {model_name!r}. Use one of {list(S.SLOTS)}.")
+    if key not in MODELS:
+        raise HTTPException(503, f"The {key} model is not loaded on this backend. "
+                                 f"Promote a checkpoint to backend/{S.SLOTS[key]['file']} "
+                                 f"(python training/promote.py --weights <best.pt> --as {key}) and restart.")
+    return key
+
+
+async def _read_image(file: UploadFile):
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(400, "Expected an image upload")
     raw = await file.read()
     from PIL import Image
     try:
-        img = Image.open(io.BytesIO(raw)).convert("RGB")
+        return Image.open(io.BytesIO(raw)).convert("RGB")
     except Exception as e:
         raise HTTPException(400, f"Could not read image: {e}")
 
+
+def _packaged_label(cls: str) -> tuple[str, Optional[str]]:
+    """(label, pantry ingredient) for a packaged class."""
+    info = PACKAGED_MAP.get(cls) or {}
+    brand, product = info.get("brand") or "", (info.get("product") or "").split(" (")[0]
+    if brand and product:
+        label = product if product.lower().startswith(brand.lower()[:5]) else f"{brand} {product}"
+    else:
+        label = display(cls)
+    return label, info.get("pantry")
+
+
+def _infer(img, slot: str) -> list[Det]:
+    chosen = MODELS[slot]
     W, H = img.size
     res = chosen.predict(img, conf=CONF, iou=IOU, verbose=False)[0]
     out: list[Det] = []
@@ -283,11 +293,16 @@ async def _infer(file: UploadFile, chosen) -> list[Det]:
         x1, y1, x2, y2 = boxes[i].tolist()
         cid = int(clses[i])
         raw_name = chosen.names[cid]
+        class_name, label, brand = raw_name, display(raw_name), None
+        if slot == "packaged":
+            label, pantry = _packaged_label(raw_name)
+            brand = raw_name
+            class_name = pantry or raw_name
         out.append(Det(
-            id=f"{cid}-{i}",
+            id=f"{slot[0]}{cid}-{i}",
             classId=cid,
-            className=raw_name,
-            label=display(raw_name),
+            className=class_name,
+            label=label,
             confidence=float(confs[i]),
             box={
                 "x": max(0.0, x1) / W * 100,
@@ -295,30 +310,51 @@ async def _infer(file: UploadFile, chosen) -> list[Det]:
                 "w": max(0.0, x2 - x1) / W * 100,
                 "h": max(0.0, y2 - y1) / H * 100,
             },
+            source=slot,
+            brand=brand,
         ))
     out.sort(key=lambda d: d.confidence, reverse=True)
     return out
 
 
+def _iou(a: dict, b: dict) -> float:
+    ax2, ay2, bx2, by2 = a["x"] + a["w"], a["y"] + a["h"], b["x"] + b["w"], b["y"] + b["h"]
+    iw = max(0.0, min(ax2, bx2) - max(a["x"], b["x"]))
+    ih = max(0.0, min(ay2, by2) - max(a["y"], b["y"]))
+    inter = iw * ih
+    union = a["w"] * a["h"] + b["w"] * b["h"] - inter
+    return inter / union if union > 0 else 0.0
+
+
+def _scan(img) -> list[Det]:
+    """Ingredients + packaged, merged. Where a branded pack and an ingredient
+    box name the same pantry item in the same place, keep the branded one."""
+    dets = _infer(img, "ingredients")
+    if "packaged" not in MODELS:
+        return dets
+    packs = _infer(img, "packaged")
+    dets = [d for d in dets
+            if not any(p.className == d.className and _iou(p.box, d.box) > 0.3 for p in packs)]
+    merged = dets + packs
+    merged.sort(key=lambda d: d.confidence, reverse=True)
+    return merged
+
+
 @app.post("/detect", response_model=List[Det])
 async def detect(
     file: UploadFile = File(...),
-    model: Optional[str] = Query(None, description="'ingredients' (default) or 'dishes'"),
+    model: Optional[str] = Query(None, description="omit for a merged scan, or one of: ingredients, dishes, packaged"),
 ):
-    chosen, _ = _pick(model)
-    return await _infer(file, chosen)
+    img = await _read_image(file)
+    if model is None or model.strip().lower() in ("", "scan", "all"):
+        return _scan(img)
+    return _infer(img, _pick(model))
 
 
-@app.post("/detect/dishes", response_model=List[Det])
-async def detect_dishes(file: UploadFile = File(...)):
-    chosen, _ = _pick("dishes")
-    return await _infer(file, chosen)
-
-
-@app.post("/detect/ingredients", response_model=List[Det])
-async def detect_ingredients(file: UploadFile = File(...)):
-    chosen, _ = _pick("ingredients")
-    return await _infer(file, chosen)
+@app.post("/detect/{slot}", response_model=List[Det])
+async def detect_slot(slot: str, file: UploadFile = File(...)):
+    key = _pick(slot)
+    return _infer(await _read_image(file), key)
 
 
 if __name__ == "__main__":

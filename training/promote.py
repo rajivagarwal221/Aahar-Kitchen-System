@@ -6,6 +6,7 @@ work with a zero-tensor smoke forward pass, and prints a clean summary
 (class count, size, inference latency on this machine).
 
     python training/promote.py --run yolov11m_if20_pretrain --as dishes
+    python training/promote.py --weights <Drive>/runs/aahar_packaged_v1/weights/best.pt --as packaged
     # or an explicit file:
     python training/promote.py --weights results/<run>/weights/best.pt
 
@@ -15,8 +16,12 @@ Safeties
   you really want the demo model to be synthetic.
 - Backs up the previous backend/best.pt as backend/best.pt.bak before
   overwriting, so rollback is one rename away.
-- Refuses to put a model into the ingredients slot (backend/best.pt) unless
-  its class list matches src/lib/classNames.ts exactly, names and order.
+- Three slots, one file each (backend/slots.py): ingredients -> best.pt,
+  dishes -> best_dishes.pt, packaged -> best_packaged.pt. Promoting one
+  never touches the others.
+- Refuses to promote unless the model's class list matches the slot's list
+  in the repo exactly, names and order (ingredients: src/lib/classNames.ts,
+  dishes: datasets/indianfood20.yaml, packaged: datasets/packaged/classes.csv).
   Pass --allow-class-drift to override.
 - Writes a promotion record to backend/.promoted_<slot>.json with the run
   id, source path, timestamp, and class count.
@@ -45,27 +50,8 @@ ROOT = Path(__file__).resolve().parents[1]
 RESULTS = ROOT / "results"
 LEGACY_RESULTS = ROOT / "runs/detect/results"
 BACKEND = ROOT / "backend"
-CLASS_NAMES_TS = ROOT / "src/lib/classNames.ts"
-
-
-def frontend_class_names() -> list[str] | None:
-    """Parse CLASS_NAMES from src/lib/classNames.ts (the Pantry page's list of
-    ingredient classes, in model output order). None if the file is missing."""
-    if not CLASS_NAMES_TS.exists():
-        return None
-    import re
-    text = CLASS_NAMES_TS.read_text(encoding="utf-8")
-    m = re.search(r"CLASS_NAMES[^=]*=\s*\[(.*?)\]\s*as const", text, re.S)
-    if not m:
-        return None
-    return re.findall(r'"([^"]+)"', m.group(1))
-
-
-def model_class_names(weights: Path) -> list[str]:
-    names = YOLO(str(weights)).names
-    if isinstance(names, dict):
-        return [names[i] for i in sorted(names)]
-    return list(names)
+sys.path.insert(0, str(BACKEND))
+import slots as S  # noqa: E402  (backend/slots.py: slot files + expected class lists)
 
 
 def find_weights(run: str) -> Path:
@@ -100,14 +86,14 @@ def main() -> None:
                     help="Skip the zero-tensor forward pass.")
     ap.add_argument("--allow-smoke", action="store_true",
                     help="Allow promoting weights trained on the smoke dataset.")
-    ap.add_argument("--as", dest="slot", choices=["ingredients", "dishes", "auto"],
+    ap.add_argument("--as", dest="slot", choices=[*S.SLOTS, "auto"],
                     default="auto",
                     help="Which backend slot to promote into. 'auto' (default) "
-                         "inspects the run's args.yaml: trained on indianfood20 "
-                         "-> dishes; anything else -> ingredients.")
+                         "picks the slot whose class list the model matches "
+                         "exactly, else guesses from the run's args.yaml.")
     ap.add_argument("--allow-class-drift", action="store_true",
-                    help="Promote into the ingredients slot even if the model's "
-                         "class list differs from src/lib/classNames.ts.")
+                    help="Promote even if the model's class list differs from the "
+                         "slot's list in the repo (see backend/slots.py).")
     args = ap.parse_args()
 
     if not args.run and not args.weights:
@@ -144,44 +130,49 @@ def main() -> None:
         print(f"[promote.py] note: smoke marker present but weights trained on "
               f"{Path(data_rel).name if data_rel else 'unknown dataset'} (not ahaar-fridge). Proceeding.")
 
-    # Decide the slot (ingredients vs dishes).
+    got = S.model_names(YOLO(str(src)))
+
+    # Decide the slot.
     slot = args.slot
     if slot == "auto":
-        slot = "ingredients"  # safe default
-        args_yaml_src = src.parent.parent / "args.yaml"
-        if args_yaml_src.exists():
-            try:
-                tcfg = yaml.safe_load(args_yaml_src.read_text(encoding="utf-8")) or {}
-                data_rel = str(tcfg.get("data", "")).lower()
-                if "indianfood20" in data_rel:
-                    slot = "dishes"
-            except Exception:
-                pass
+        slot = S.suggest_slot(got)
+        if slot is None:
+            slot = "ingredients"  # safe default; the class check below still guards it
+            args_yaml_src = src.parent.parent / "args.yaml"
+            if args_yaml_src.exists():
+                try:
+                    tcfg = yaml.safe_load(args_yaml_src.read_text(encoding="utf-8")) or {}
+                    data_rel = str(tcfg.get("data", "")).lower()
+                    if "indianfood20" in data_rel:
+                        slot = "dishes"
+                    elif "packaged" in data_rel:
+                        slot = "packaged"
+                except Exception:
+                    pass
         print(f"[promote.py] slot auto-detected: {slot}")
 
-    filename = "best.pt" if slot == "ingredients" else "best_dishes.pt"
+    filename = S.SLOTS[slot]["file"]
 
-    # The ingredients slot backs the Scan/Pantry flow, whose class list is
-    # hard-coded in src/lib/classNames.ts. Check before overwriting best.pt so
-    # a 20-class dish model can't silently replace the 107-class detector.
-    if slot == "ingredients":
-        expected = frontend_class_names()
-        got = model_class_names(src)
-        if expected is not None and got != expected:
-            missing = [c for c in expected if c not in got]
-            extra = [c for c in got if c not in expected]
-            msg = (f"[promote.py] class mismatch: {src.name} has {len(got)} classes, "
-                   f"src/lib/classNames.ts expects {len(expected)}.\n"
-                   f"    not in model: {missing[:10]}{' ...' if len(missing) > 10 else ''}\n"
-                   f"    not in classNames.ts: {extra[:10]}{' ...' if len(extra) > 10 else ''}")
-            if not missing and not extra:
-                msg += "\n    same names, different order (class ids would be mislabelled)."
+    # Each slot's class list is fixed by the repo (ingredients: classNames.ts,
+    # dishes: indianfood20.yaml, packaged: datasets/packaged/classes.csv).
+    # Check before overwriting so e.g. a 20-class dish model can't silently
+    # replace the 107-class ingredient detector.
+    expected = S.expected_classes(slot)
+    if expected is None:
+        print(f"[promote.py] note: no repo class list for slot {slot}; skipping class check.")
+    else:
+        diff = S.diff_classes(got, expected)
+        if diff:
+            hint = S.suggest_slot(got)
+            msg = f"[promote.py] class mismatch for slot {slot}: {diff}."
             if not args.allow_class_drift:
                 raise SystemExit(
-                    msg + "\n    If this is a dish model, pass --as dishes. If the ingredient "
-                    "classes really changed, update src/lib/classNames.ts first or pass "
-                    "--allow-class-drift.")
-            print(msg + "\n    proceeding (--allow-class-drift).")
+                    msg + (f"\n    This model matches the {hint} slot: pass --as {hint}." if hint else
+                           "\n    If the classes really changed, update the slot's class list "
+                           "first (see backend/slots.py) or pass --allow-class-drift."))
+            print(msg + " Proceeding (--allow-class-drift).")
+        else:
+            print(f"[promote.py] {len(got)} classes match the {slot} list.")
 
     # Copy with a backup so rollback is cheap.
     BACKEND.mkdir(parents=True, exist_ok=True)
@@ -219,7 +210,7 @@ def main() -> None:
             exported = model.export(format="onnx", opset=12, dynamic=False, simplify=True)
             onnx_path = str(exported)
             # YOLO.export writes next to the .pt; move it into backend/ for a tidy layout.
-            onnx_name = "best.onnx" if slot == "ingredients" else "best_dishes.onnx"
+            onnx_name = Path(filename).with_suffix(".onnx").name
             final = BACKEND / onnx_name
             try:
                 shutil.move(exported, final)
@@ -242,6 +233,17 @@ def main() -> None:
         "allow_smoke": bool(args.allow_smoke),
         "promoted_at": datetime.now().isoformat(timespec="seconds"),
     }
+    # The packaged slot needs class -> brand / pantry ingredient. Prefer the
+    # pantry_map.json the training notebook wrote next to these weights.
+    if slot == "packaged":
+        run_map = src.parent.parent / "pantry_map.json"
+        if run_map.exists():
+            shutil.copy2(run_map, S.PACKAGED_MAP_FILE)
+        else:
+            S.PACKAGED_MAP_FILE.write_text(json.dumps(S.packaged_map_from_csv() or {}, indent=1),
+                                           encoding="utf-8")
+        print(f"[promote.py] wrote {S.PACKAGED_MAP_FILE.name}")
+
     # One record file per slot so promoting ingredients doesn't overwrite the
     # dishes record and vice versa.
     record_path = BACKEND / f".promoted_{slot}.json"

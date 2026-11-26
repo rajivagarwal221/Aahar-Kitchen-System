@@ -54,7 +54,16 @@ Open [`notebooks/train_aahar_packaged.ipynb`](../../notebooks/train_aahar_packag
 - Prints per-class train/val counts and flags classes with fewer than 30 training boxes.
 - Writes `per_class.csv` and `pantry_map.json` next to the weights. Upload to Hugging Face is off by default (`UPLOAD_TO_HF=False`).
 
+## Serving it
+
+After training, promote the weights into the backend's `packaged` slot:
+
+```powershell
+python training/promote.py --weights <Drive>/runs/aahar_packaged_v1/weights/best.pt --as packaged
+```
+
+This copies them to `backend/best_packaged.pt` and the run's `pantry_map.json` to `backend/pantry_map_packaged.json`. It refuses if the model's classes don't match `classes.csv`, so if you prune or add rows, retrain before promoting. Restart the backend: `POST /detect` then runs the ingredient and packaged models together and returns one list (see `backend/README.md`).
+
 ## Not done yet
 
-- Backend: `backend/app.py` only knows `ingredients` and `dishes`. Serving this model needs a third `packaged` model key and merging its results (mapped through `pantry_map.json`) into `/detect`. Left for after the first training run.
-- Frontend: show the brand name with the mapped pantry item.
+- Frontend: brand-specific UI (logo, per-pack nutrition). Today a branded hit shows as its label (`Amul Butter`) under the mapped pantry item.
