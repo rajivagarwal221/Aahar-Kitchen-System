@@ -58,43 +58,29 @@
 
 %====================================================================
 \begin{abstract}
-Household food waste, repetitive cooking decisions, and the lack of
-personalized dietary guidance remain persistent problems in Indian
-kitchens. We present \textbf{AHAAR}, a progressive web application
-that turns photographs of a refrigerator or pantry shelf into a ranked
-set of culturally appropriate recipes, portioned per family member,
+We present \textbf{AHAAR}, a progressive web application that turns
+photographs of an Indian kitchen's refrigerator or shelf into ranked,
+culturally appropriate recipes, portioned per family member,
 labelled with each member's predicted glycemic response learned from
 a Continuous Glucose Monitor (CGM), and presented in ten Indian
-languages. The system is implemented end to end. Three YOLOv11m
-detectors run behind a FastAPI service: a 107-class pantry-ingredient
-detector, a 59-class detector for branded Indian packaged foods (13
-of whose classes map directly to pantry ingredients), and a 20-class
-dish classifier. Without retraining, the three networks are packed
-into a single ONNX file (186 classes, 60.2\,M parameters) that serves
-every endpoint from one forward pass and returns the same detections
-as the separate models. The brand detector reaches 0.816 mAP@50 on
-its validation split; a guard that uses the ingredient model as a
-referee, evaluated but not yet enabled, cut invented brand tags on 160
-produce photographs from 85 to 1 while keeping every brand on 20
-shelf photographs. A 450-recipe
-index built from the
-IndianFoodDataset drives a client-side ranker that combines pantry
+languages. Three YOLOv11m detectors run behind a FastAPI service: a
+107-class pantry-ingredient detector, a 59-class detector for branded
+Indian packaged foods, and a 20-class dish classifier. Without
+retraining, they are packed into one ONNX file (186 classes, 60.2\,M
+parameters) that serves every endpoint in a single forward pass with
+the same detections as the separate models. The dish classifier
+reaches 0.988 mAP@50 on its validation split and 95.0\% top-1
+accuracy on 419 photographs from an independent dataset; the brand
+detector reaches 0.816 mAP@50. A 450-recipe index is ranked by pantry
 coverage, condition-aware penalties for each family member, and cook
-time; per-serving nutrition from the Indian Food Nutrition dataset
-(1{,}014 dishes) is attached at build time to 79\% of the recipes; a
-LibreView / Dexcom CSV pipeline computes the consensus CGM metrics in
-the browser; and a per-member Glycemic Sensitivity Index, learned from
-logged meals and their CGM windows, labels each recipe with a
-predicted glycemic impact. The 20-class dish classifier reaches 0.988
-mAP@50 and 0.965 F1 on a 1{,}159-image validation split, and 95.0\%
-top-1 accuracy on 419 photographs from an independent dataset. In an
-end-to-end test, the scan-to-pantry flow worked in desktop and
-phone-sized browsers, clean photographs of common vegetables were
-recognized at 97--100\% confidence, and dishes within the
-classifier's vocabulary at 99\%. Each major design choice is grounded
-in ten peer-reviewed IEEE papers spanning object detection,
-cross-modal recipe retrieval, nutrition-aware recommendation, portion
-estimation, and glucose-driven dietary monitoring.
+time, with per-serving nutrition attached to 79\% of recipes. A
+browser-side pipeline computes consensus CGM metrics, and a
+per-member Glycemic Sensitivity Index, learned from logged meals,
+predicts each recipe's glycemic impact. An end-to-end test confirmed
+the scan-to-pantry flow on desktop and phone, and showed that a guard
+using the ingredient detector cuts false brand tags on produce photos
+from 85 of 160 to 1. Design choices are grounded in ten peer-reviewed
+IEEE papers.
 \end{abstract}
 
 \begin{IEEEkeywords}
