@@ -717,6 +717,13 @@ and took 17.1\,h.
         95\%-of-frame box almost perfectly. Ingredient-level
         detection on cluttered fridge interiors (AHAAR-Fridge,
         \S\ref{sec:fridge}) will be harder and is not yet captured.
+  \item The split was made before duplicates were removed. A later
+        content-hash check found 62 duplicate images (1.1\% of the
+        5{,}831); about a third of such pairs end up with one copy in
+        each split, so roughly 20 validation images (about 1.7\%) may
+        also have been seen in training. The reported mAP may therefore
+        be overstated by up to about 1.7 points. The preparation script
+        now removes duplicates before splitting.
   \item Validation images come from the same Kaggle collection as the
         training images. Accuracy on household phone photos of
         home-cooked plates is untested and is likely to be lower.

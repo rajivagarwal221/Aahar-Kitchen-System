@@ -63,3 +63,7 @@ results/**/weights/
 # TensorFlow/Keras checkpoint shards sometimes shipped with Kaggle
 # drops (variables.data-00000-of-00001 etc.) — also binary and huge.
 **/variables/variables.*
+
+# Python bytecode
+__pycache__/
+*.pyc
