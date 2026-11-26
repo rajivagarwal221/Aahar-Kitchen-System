@@ -1,0 +1,60 @@
+class,brand,product,category,pantry_ingredient,aliases
+amul_butter,Amul,Butter,dairy,butter,amul butter|amulbutter
+amul_cheese,Amul,Cheese (slices / block / cubes),dairy,,amul cheese|amulcheese|amul cheese block 200g
+amul_milk,Amul,Milk pouch / Taaza tetra pack,dairy,milk,amul milk|amul taaza|amul gold
+amul_ghee,Amul,Ghee,dairy,ghee,amul ghee
+amul_dahi,Amul,Masti Dahi,dairy,curd_yogurt,amul masti dahi|amul dahi|amulmastidahi
+amul_paneer,Amul,Paneer,dairy,paneer,amul paneer
+mother_dairy_milk,Mother Dairy,Milk pouch,dairy,milk,mother dairy milk
+aashirvaad_atta,Aashirvaad,Whole wheat atta,staples,atta_flour,aashirvaad atta|aashirvaad
+tata_salt,Tata,Salt,staples,salt,tata salt
+india_gate_basmati,India Gate,Basmati rice,staples,basmati_rice,india gate basmati|india gate
+daawat_basmati,Daawat,Basmati rice,staples,basmati_rice,daawat basmati|daawat
+fortune_sunflower_oil,Fortune,Sunflower oil,staples,sunflower_oil,fortune sunflower oil
+fortune_mustard_oil,Fortune,Kachi ghani mustard oil,staples,mustard_oil,fortune kachi ghani oil|fortune mustard oil
+saffola_oil,Saffola,Edible oil (Gold / Active),staples,,saffola active oil|saffola gold|suffola|saffola
+patanjali_ghee,Patanjali,Cow ghee,staples,ghee,patanjali ghee|patanjali cow ghee
+tata_sampann_dal,Tata Sampann,Dal (any),staples,,tata sampann dal
+everest_masala,Everest,Masala box (any),spices,,everest|everest masala
+mdh_masala,MDH,Masala box (any),spices,,mdh|mdh masala
+catch_masala,Catch,Spice (any),spices,,catch|catch masala
+maggi_noodles,Maggi,Instant noodles,instant,,maggi|nestle maggi|maggi noodles|maggi masala noodles 420g
+yippee_noodles,Sunfeast YiPPee!,Instant noodles,instant,,yippee|yippee noodles
+chings_secret,Ching's Secret,Noodles / Schezwan chutney,instant,,chings|chings secret
+knorr_soup,Knorr,Soup packet,instant,,knorr|knorr soup
+mtr_ready_mix,MTR,Ready-to-eat / instant mix,instant,,mtr|mtr ready to eat|mtr rava idli mix
+kissan_ketchup,Kissan,Tomato ketchup,sauces,,kissan tomato ketchup|kissan no onion ketchup
+maggi_ketchup,Maggi,Hot & Sweet ketchup,sauces,,maggi ketchup|maggi hot and sweet
+kissan_jam,Kissan,Mixed fruit jam,sauces,,kissan jam
+parle_g,Parle,Parle-G biscuits,biscuits,,parle g|parleg|parle-g|parle g gold
+parle_monaco,Parle,Monaco,biscuits,,parle monaco|monaco
+parle_krackjack,Parle,Krackjack,biscuits,,parle krackjack|krackjack
+parle_hide_and_seek,Parle,Hide & Seek,biscuits,,parle hide&seek|hide-seek_chocolate_parle|hide-seek_cremesandwiches|hide & seek
+parle_marie,Parle,Marie,biscuits,,parle marie
+britannia_good_day,Britannia,Good Day,biscuits,,britannia good day|good day
+britannia_marie_gold,Britannia,Marie Gold,biscuits,,britannia marie gold|marie gold
+britannia_bourbon,Britannia,Bourbon,biscuits,,biscuit_bourbon|britannia bourbon|bourbon
+britannia_nutrichoice,Britannia,NutriChoice digestive,biscuits,,nutrichoice|britannia nutrichoice
+sunfeast_dark_fantasy,Sunfeast,Dark Fantasy,biscuits,,dark fantasy|sunfeast dark fantasy
+oreo,Cadbury,Oreo,biscuits,,oreo
+britannia_bread,Britannia,Bread,bakery,,britannia bread
+haldirams_namkeen,Haldiram's,Namkeen / bhujia (any),snacks,,haldiram|haldirams|haldirams bhujia
+lays_chips,Lay's,Potato chips,snacks,,lays|lay's|lays chips
+kurkure,Kurkure,Kurkure,snacks,,kurkure
+bingo_chips,Bingo,Mad Angles / Tedhe Medhe,snacks,,bingo|bingo mad angles
+balaji_wafers,Balaji,Wafers / namkeen,snacks,,balaji|balaji wafers
+tata_tea,Tata Tea,Tea (Premium / Gold / Agni),beverages,,tata tea|tatagold|tatapremium|tata tea gold|tata tea premium
+red_label_tea,Brooke Bond,Red Label tea,beverages,,redlabel|red label|brooke bond red label
+taaza_tea,Brooke Bond,Taaza tea,beverages,,taaza|brookbond taaza|brooke bond taaza
+nescafe_classic,Nescafe,Classic coffee,beverages,,nescafe|nescafe_classic_coffee|nescafe classic
+bru_coffee,Bru,Instant coffee,beverages,,bru|bru coffee
+bournvita,Cadbury,Bournvita,beverages,,bournvita|cadbury bournvita
+horlicks,Horlicks,Horlicks,beverages,,horlicks|hourlicks
+real_juice,Dabur,Real fruit juice,beverages,,real|dabur real|real juice
+frooti,Parle Agro,Frooti,beverages,,frooti
+cadbury_dairy_milk,Cadbury,Dairy Milk,chocolate,,dairy milk|cadbury dairy milk|chocolate_dairymilk_cadbury
+kitkat,Nestle,KitKat,chocolate,,kitkat|kit kat
+kelloggs_corn_flakes,Kellogg's,Corn Flakes,breakfast,,kelloggs corn flakes|kellogg corn flakes
+saffola_oats,Saffola,Masala oats,breakfast,,saffola oats|saffola masala oats
+quaker_oats,Quaker,Oats,breakfast,,quaker|quaker oats
+nestle_cerelac,Nestle,Cerelac,breakfast,,cerelac|nestle cerelac
