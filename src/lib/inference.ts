@@ -76,7 +76,7 @@ export async function classifyDish(imageSrc: string): Promise<Detection[]> {
   }
   if (res.status === 503) {
     throw new Error('The dish classifier isn\'t loaded on this backend. ' +
-      'Run `python training/promote.py --run yolov11m_if20_pretrain --allow-smoke` to install it.');
+      'Run `python training/promote.py --run yolov11m_if20_pretrain --as dishes` to install it.');
   }
   if (!res.ok) {
     throw new Error(`Dish classifier returned ${res.status}.`);
