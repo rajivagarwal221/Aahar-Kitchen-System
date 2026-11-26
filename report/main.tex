@@ -72,7 +72,10 @@ of whose classes map directly to pantry ingredients), and a 20-class
 dish classifier. Without retraining, the three networks are packed
 into a single ONNX file (186 classes, 60.2\,M parameters) that serves
 every endpoint from one forward pass and returns the same detections
-as the separate models. A 450-recipe index built from the
+as the separate models. A guard that uses the ingredient model as a
+referee cut invented brand tags on 160 produce photographs from 85 to
+1 while keeping every brand on 20 shelf photographs. A 450-recipe
+index built from the
 IndianFoodDataset drives a client-side ranker that combines pantry
 coverage, condition-aware penalties for each family member, and cook
 time; per-serving nutrition from the Indian Food Nutrition dataset
@@ -385,8 +388,9 @@ checked against the lists the UI depends on. Endpoints:
         state and class count.
 \end{itemize}
 Every detection is returned as \texttt{\{classId, className, label,
-confidence, box, brand\}}, with a confidence threshold of 0.25 and
-NMS IoU 0.45 shared by all slots. A display-name map translates the
+confidence, box, brand\}}, with a base confidence threshold of 0.25
+and NMS IoU 0.45. In the merged scan, brand boxes must also pass the
+guard described in \S\ref{sec:e2e}. A display-name map translates the
 107 raw ingredient keys (e.g.\ \texttt{toor\_dal},
 \texttt{methi\_leaves}) into friendly labels (``Toor dal'', ``Methi
 (fenugreek) leaves''). Non-image uploads and unknown slot names are
@@ -626,17 +630,23 @@ ingredient it contains, so the recipe ranker works unchanged. The
 other 46 classes (biscuits, snacks, chocolate and the like) appear in
 the pantry under their brand name.
 
-\textbf{Data.} Training images were merged from four Roboflow
-Universe datasets of Indian retail products (three CC~BY~4.0), with
-class names reconciled through a per-class alias list; images
-containing brand-only labels (e.g.\ ``Britannia'' with no product)
-were dropped as ambiguous. About 34 of the 59 classes have no public
-boxes at all, so the Colab notebook
-(\texttt{notebooks/train\_aahar\_packaged.ipynb}) also downloads
-about 80 web photos per class from image search, removes duplicates
-and small images, and draws boxes automatically with the
-open-vocabulary detector YOLO-World, showing a contact sheet so that
-wrong photos can be removed by hand. The final number of training and validation images is
+\textbf{Data.} The Colab notebook
+(\texttt{notebooks/train\_aahar\_packaged.ipynb}) draws on three
+sources. (i) Four Roboflow Universe datasets of Indian retail
+products (three under CC~BY~4.0), with class names reconciled through
+a per-class alias list; images containing brand-only labels (e.g.\
+``Britannia'' with no product) are dropped as ambiguous. (ii) Because
+about 34 of the 59 classes have no public boxes at all, web
+photographs from image search (Bing, with DuckDuckGo as a fallback):
+up to 80 per class are requested, and after dead links, duplicates
+and small images are removed, roughly 40--70 per class remained in
+our run. (iii) Front-of-pack photographs from Open Food Facts, which
+contributed only 307 images for 21 classes because its server
+returned errors during the run. Photographs without boxes are boxed
+automatically with the open-vocabulary detector YOLO-World, and a
+contact sheet is shown so that wrong photographs can be removed by
+hand. No household photographs were used. The final number of
+training and validation images is
 \pending{N train / N val images -- from the notebook's per-class count cell}.
 
 \textbf{Training.} YOLOv11m was fine-tuned from COCO on a Colab T4
@@ -644,7 +654,10 @@ GPU at $640\times640$, configured for 80 epochs with early-stopping
 patience 20, mosaic augmentation (disabled for the last 10 epochs),
 rotation up to $10^\circ$ and scale jitter 0.6. Horizontal flipping
 was \emph{disabled}, since a mirrored logo or label is not a real
-product. Results are in \S\ref{sec:packaged-results}.
+product. Training took about two hours. The exported model has 125
+layers after fusion, 20{,}075{,}521 parameters and 67.9 GFLOPs at
+$640\times640$, and is 76.9\,MB as ONNX. Results are in
+\S\ref{sec:packaged-results}.
 
 \subsection{Single-File Model Combination}
 \label{sec:combined}
@@ -677,9 +690,13 @@ ingredients $[0,107)$, dishes $[107,127)$, packaged $[127,186)$.
 
 Since the weights are copied unchanged, the combined model's
 accuracy equals that of the separate models. We checked this
-directly: on the same photographs, the combined file returned the
-same detections as the three separate checkpoints, and the backend
-loaded it from Hugging Face with every class-list check passing.
+directly with the real weights: on three test photographs, the
+combined file returned the same detections as the three separate
+checkpoints, and the backend loaded it from Hugging Face with every
+class-list check passing. Because the ONNX graph has a fixed
+$640\times640$ input, confidence scores in the backend can differ by a
+few points from inference with the separate checkpoints, which resize
+each photograph differently.
 Table~\ref{tab:models} lists the resulting models.
 
 \begin{figure}[!tb]
@@ -723,12 +740,12 @@ Combined ONNX & 186 & 60{,}233{,}502 & (no retraining) \\
 \bottomrule
 \end{tabular}
 \\[2pt]
-{\scriptsize Parameters are counted after BatchNorm layers are
-fused into the convolutions, as stored in the combined file (the
-unfused dish model has 20.07\,M, shown as 20.1\,M in
-Table~\ref{tab:results}). The
-combined file is $\sim$242\,MB and is hosted at Hugging Face
-\texttt{Rajiv221/aahar-combined-detector}.
+{\scriptsize Parameter counts are exact and are taken after
+BatchNorm layers are fused into the convolutions, as in the deployed
+files; we confirmed them by counting the weights stored in the
+combined ONNX file. Each model has a shared YOLOv11m body plus 771
+parameters per class. The combined file is 241.9\,MB and is hosted
+at Hugging Face \texttt{Rajiv221/aahar-combined-detector}.
 $^{\ddagger}$Scraped ingredient photographs.}
 \end{table}
 
@@ -902,7 +919,7 @@ for validation, giving 4{,}672 training and 1{,}159 validation images
 (28--75 per class). Each image receives one centred box covering 95\%
 of the frame.
 
-A YOLOv11m model (20.1\,M parameters) was fine-tuned from COCO
+A YOLOv11m model (20{,}045{,}452 parameters after fusion) was fine-tuned from COCO
 weights for 50 epochs at $640\times640$, batch 16, with the
 optimizer chosen automatically by Ultralytics (AdamW,
 $\mathrm{lr}=4.17\times10^{-4}$), early-stopping patience 15 and seed
@@ -956,7 +973,8 @@ mAP@50                 & 0.988 \\
 mAP@50:95              & 0.988 \\
 Precision / Recall     & 0.974 / 0.955 \\
 F1                     & 0.965 \\
-Parameters / weights   & 20.1\,M / 38.7\,MB \\
+Parameters (fused)     & 20{,}045{,}452 \\
+Weights file (.pt)     & 38.7\,MB \\
 CPU latency (median)   & 233\,ms / image \\
 GPU latency (median)   & 26--75\,ms / image$^{\dagger}$ \\
 \bottomrule
@@ -1063,7 +1081,7 @@ subset (Table~\ref{tab:pilot}). These numbers are not comparable with
 Table~\ref{tab:results}, which covers all twenty classes.
 
 \begin{table}[!tb]
-\caption{Pilot ablation on the 8-class subset. M = parameters
+\caption{Pilot ablation on the 8-class subset. M = parameters before layer fusion
 (millions); GPU = median CUDA ms/image.}
 \label{tab:pilot}
 \centering
@@ -1127,8 +1145,9 @@ network address worked.
 scan and the dish slot returned on the test photographs.
 
 \begin{table}[!tb]
-\caption{End-to-end detections on sample photographs
-(merged ingredients + packaged scan, and the dish slot).}
+\caption{End-to-end detections on sample photographs (merged
+ingredients + packaged scan before the brand guard was added, and the
+dish slot).}
 \label{tab:e2e}
 \centering
 \scriptsize
@@ -1159,11 +1178,9 @@ stand out:
 \begin{enumerate}
   \item \textbf{Brand false positives on loose produce.} The
         packaged model fires on vegetables (a carrot returned
-        ``Balaji Wafers'' at 62\%). Both slots currently share one
-        confidence threshold (0.25), and the brand model was trained
-        without loose produce as background. A brand-specific
-        threshold and background images of loose vegetables are
-        being added.
+        ``Balaji Wafers'' at 62\%), because it was trained without
+        loose produce as background. This is addressed by the brand
+        guard described below.
   \item \textbf{Loose pulses.} Visually similar dals and legumes are
         confused with each other, and a collage of pulses returned
         nothing.
@@ -1172,6 +1189,46 @@ stand out:
         (Maggi) or a raw ingredient is mapped to the nearest dish at
         high confidence. The Cook-along page warns the user of this.
 \end{enumerate}
+\textbf{Brand guard.} To measure the false-positive problem, we ran
+160 photographs of loose fruit and vegetables through the combined
+model. With the plain 0.25 threshold, 85 of the 160 photographs
+received at least one invented brand, often at high confidence (a
+carrot as Horlicks at 94\%, an onion as Kissan Jam at 97\%). We
+therefore use the ingredient model, which is reliable on produce, as
+a referee in the merged scan. A brand box (i)~needs a confidence of
+at least 0.35; (ii)~is dropped if it overlaps (IoU $>0.3$) a
+fresh-produce detection that the ingredient model makes with
+confidence $\geq 0.5$; and (iii)~if such produce is present elsewhere
+in the photograph, is kept only at confidence $\geq 0.7$, so that a
+small pack beside the vegetables (a ketchup bottle next to tomatoes)
+can still be reported. The fresh-produce set contains 39 of the 107
+ingredient classes. With the guard, only 1 of the 160 produce
+photographs kept a false brand (peas as Amul Paneer at 46\%, where
+the ingredient model itself was unsure), and the carrot photograph
+returned only ``Carrot 99\%''. On 20 shop-shelf photographs, every
+brand box was kept (Table~\ref{tab:guard}). The thresholds are
+environment variables, and \texttt{/detect/packaged} remains
+unfiltered. We could not measure whether the guard removes correct
+detections of real Indian packs on a kitchen counter, because no
+labelled photographs of that kind were available; the lasting fix is
+to retrain the brand model with loose-produce background images.
+
+\begin{table}[!tb]
+\caption{Effect of the brand guard in the merged scan.}
+\label{tab:guard}
+\centering
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{l c c}
+\toprule
+\textbf{Test set} & \textbf{Without guard} & \textbf{With guard} \\
+\midrule
+160 produce photos: photos with a false brand & 85 & 1 \\
+20 shelf photos: brand boxes kept & all & all \\
+\bottomrule
+\end{tabular}
+\end{table}
+
 Smaller issues: since the ingredient model returns whole-frame
 boxes, several items in one shot stack their labels at the top edge;
 a clean onion photograph on a white background was flagged
@@ -1192,10 +1249,11 @@ and GPU latency were outside this test's scope.
         IndianFood10, demonstrating that the ingredient-level task
         is tractable and that two-stage transfer generalizes.
   \item \textbf{Packaged brands:} per-class mAP@50 on a validation
-        split of household shelf and fridge-door photographs, and the
-        false-positive rate on photographs of loose produce before
-        and after adding background images and a brand-specific
-        threshold.
+        split of household shelf and fridge-door photographs; recall
+        on real packs with and without the brand guard, which has
+        not yet been measured; and the false-positive rate on loose
+        produce (currently 1 of 160 with the guard) after retraining
+        with background images.
   \item \textbf{Combined model:} detection-level agreement with the
         three separate models on a fixed photo set, and CPU latency
         of one combined pass against three separate passes.
@@ -1236,7 +1294,7 @@ one large model, kept each model independently replaceable: a new
 brand model can be trained and re-combined without touching the
 ingredient or dish weights, and the backend falls back to the separate
 files if the combined one is unavailable. The cost is that the
-combined file is three networks in size ($\sim$242\,MB) and one
+combined file is three networks in size (241.9\,MB) and one
 combined pass still does the work of three backbones; a shared
 backbone with three heads would be smaller, but would require
 retraining with real boxes for all 186 classes.
@@ -1279,9 +1337,9 @@ downloaded.
 Future work includes: (i) capturing AHAAR-Fridge, testing the dish
 classifier on household phone photos, repeating the two-stage
 comparison on all twenty IF20 classes, and scaling to 50 classes with
-semi-supervised labeling; (ii) reducing the packaged model's false
-positives on loose produce with background images and a
-brand-specific threshold, adding household shelf photographs to its
+semi-supervised labeling; (ii) retraining the packaged model with
+loose-produce background images so that the guard becomes a safety
+net rather than a necessity, adding household shelf photographs to its
 validation split, attaching per-pack nutrition from the Indian
 packaged-foods nutrition table, and re-labelling the ingredient data
 with real boxes so the detectors can share one backbone;
