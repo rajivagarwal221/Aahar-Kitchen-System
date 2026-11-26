@@ -55,6 +55,11 @@ except ImportError as e:
 # backend/best.pt and reused on subsequent boots.
 
 _HF_DEFAULT = "https://huggingface.co/Rajiv221/aahar-ingredient-detector/resolve/main/best.pt"
+# The packaged slot also has a Hugging Face default, so a fresh deployment picks
+# it up once notebooks/train_aahar_packaged.ipynb has been uploaded there. If the
+# repo is missing, the download fails quietly and the slot is skipped.
+_HF_PACKAGED = "https://huggingface.co/Rajiv221/aahar-packaged-detector/resolve/main/"
+_HF_SLOT_DEFAULTS = {"packaged": _HF_PACKAGED + "best.pt"}
 BACKEND_DIR = Path(__file__).parent
 
 def _download(url: str, dst: Path) -> bool:
@@ -88,9 +93,13 @@ def _resolve(slot: str) -> str | None:
     if local.exists():
         return str(local)
 
-    url = os.environ.get(f"MODEL_URL_{up}") or (os.environ.get("MODEL_URL") or _HF_DEFAULT if ing else None)
+    url = os.environ.get(f"MODEL_URL_{up}") or (os.environ.get("MODEL_URL") or _HF_DEFAULT if ing
+                                                  else _HF_SLOT_DEFAULTS.get(slot))
     url_fallback = os.environ.get(f"MODEL_URL_FALLBACK_{up}") or (os.environ.get("MODEL_URL_FALLBACK") if ing else None)
     if url and _download(url, local):
+        if slot == "packaged" and url.startswith(_HF_PACKAGED) and not S.PACKAGED_MAP_FILE.exists():
+            # Brand/product/pantry names for a slim deployment without classes.csv.
+            _download(_HF_PACKAGED + "pantry_map.json", S.PACKAGED_MAP_FILE)
         return str(local)
     if url_fallback and _download(url_fallback, local):
         return str(local)
