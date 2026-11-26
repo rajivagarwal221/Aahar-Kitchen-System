@@ -6,6 +6,14 @@ dist/
 tsconfig.tsbuildinfo
 .env.local
 .claude/
+.env
+.env.*
+!.env.example
+
+# Local promotion records written by training/promote.py (contain machine paths)
+backend/.promoted*.json
+backend/best.pt
+backend/best.onnx
 
 # graphify
 graphify-out/
@@ -33,13 +41,24 @@ data/images/**/.AHAAR_SMOKE_MARKER
 # ships, but every actual dataset payload stays local.
 datasets/raw/**
 !datasets/raw/.gitkeep
-!datasets/raw/*/
+!datasets/raw/**/
 !datasets/raw/**/.gitkeep
+# Small recipe/nutrition CSVs that are committed on purpose:
+# datasets/scripts/build_recipes.py reads them to build public/recipes.json.
+!datasets/raw/recipes/**/*.csv
+!datasets/raw/nutrition/**/*.csv
 
 # Training outputs — results dirs, metrics, and any ultralytics fallback
 # path. Keep the results/ folder itself (via .gitkeep) so paths work.
 results/**
 !results/.gitkeep
+# Small metrics and plots the report cites stay tracked; weights do not.
+!results/**/
+!results/**/*.csv
+!results/**/*.json
+!results/**/*.png
+!results/**/*.yaml
+results/**/weights/
 
 # TensorFlow/Keras checkpoint shards sometimes shipped with Kaggle
 # drops (variables.data-00000-of-00001 etc.) — also binary and huge.
