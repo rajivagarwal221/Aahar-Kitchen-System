@@ -95,8 +95,9 @@ Per slot, the backend tries `MODEL_PATH_<SLOT>`, then `backend/<file>`, then
 `MODEL_URL_<SLOT>`, then `MODEL_URL_FALLBACK_<SLOT>` (e.g.
 `MODEL_URL_PACKAGED`). The packaged slot falls back to
 `https://huggingface.co/Rajiv221/aahar-packaged-detector/resolve/main/best.pt`
-(and fetches `pantry_map.json` from the same repo); if that repo doesn't exist
-the slot is skipped. For the ingredients slot the older names below still
+(and fetches `pantry_map.json` from the same repo), and the dishes slot to
+`https://huggingface.co/Rajiv221/aahar-dish-classifier/resolve/main/best.pt`;
+if a repo doesn't exist, that slot is skipped. For the ingredients slot the older names below still
 work, in this order:
 
 1. **`MODEL_PATH`** env var → use the `.pt` at this absolute path.

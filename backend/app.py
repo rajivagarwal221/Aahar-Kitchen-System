@@ -59,11 +59,13 @@ except ImportError as e:
 # backend/best.pt and reused on subsequent boots.
 
 _HF_DEFAULT = "https://huggingface.co/Rajiv221/aahar-ingredient-detector/resolve/main/best.pt"
-# The packaged slot also has a Hugging Face default, so a fresh deployment picks
-# it up once notebooks/train_aahar_packaged.ipynb has been uploaded there. If the
-# repo is missing, the download fails quietly and the slot is skipped.
+# The packaged and dishes slots also have Hugging Face defaults, so a fresh
+# deployment picks each one up once its weights are uploaded there. If a repo
+# is missing, the download fails quietly and that slot is skipped.
 _HF_PACKAGED = "https://huggingface.co/Rajiv221/aahar-packaged-detector/resolve/main/"
-_HF_SLOT_DEFAULTS = {"packaged": _HF_PACKAGED + "best.pt"}
+# The 20-class IndianFood20 dish model (used by the Cook page's dish check).
+_HF_DISHES = "https://huggingface.co/Rajiv221/aahar-dish-classifier/resolve/main/best.pt"
+_HF_SLOT_DEFAULTS = {"packaged": _HF_PACKAGED + "best.pt", "dishes": _HF_DISHES}
 BACKEND_DIR = Path(__file__).parent
 
 def _download(url: str, dst: Path) -> bool:

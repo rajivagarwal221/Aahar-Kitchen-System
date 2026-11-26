@@ -59,5 +59,15 @@ export default defineConfig({
       },
     }),
   ],
-  server: { host: true, port: 5173 },
+  server: {
+    host: true,
+    port: 5173,
+    // In dev the app calls /detect on its own origin and Vite forwards it to
+    // the FastAPI backend, so a phone on the same Wi-Fi (http://<pc-ip>:5173)
+    // reaches the backend too, with no CORS setup. VITE_DETECT_URL overrides.
+    proxy: {
+      '/detect': 'http://localhost:8000',
+      '/health': 'http://localhost:8000',
+    },
+  },
 });
