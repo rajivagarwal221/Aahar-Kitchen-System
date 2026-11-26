@@ -29,7 +29,7 @@ flowchart LR
   pantry[Pantry page]:::ui
   recipes[(recipes.json<br/>450 recipes +<br/>dish nutrition)]:::data
   rank[rankRecipes<br/>pantry 60% ·<br/>family 25% · speed 15%]:::model
-  nutrcsv[(Indian Food Nutrition CSV<br/>1,005 dishes · 1,381 variants)]:::data
+  nutrcsv[(Indian Food Nutrition CSV<br/>1,014 dishes · 1,381 variants)]:::data
   recipes -. nutrition enrichment .- nutrcsv
   pantry --> rank
   recipes --> rank
