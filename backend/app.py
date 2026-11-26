@@ -121,6 +121,31 @@ model_ing = YOLO(_ing_path)
 model_ing.predict(np.zeros((640, 640, 3), dtype=np.uint8), verbose=False)
 print(f"[model] ingredients ready: {len(model_ing.names)} classes")
 
+
+def _check_ingredient_classes() -> None:
+    """Warn loudly if best.pt's classes differ from src/lib/classNames.ts.
+    The Pantry page offers CLASS_NAMES as the ingredient list, so a different
+    model (e.g. the 20-class dish model promoted into this slot) breaks it.
+    Skipped when the frontend source isn't next to the backend (deployments)."""
+    ts = BACKEND_DIR.parent / "src/lib/classNames.ts"
+    if not ts.exists():
+        return
+    m = re.search(r"CLASS_NAMES[^=]*=\s*\[(.*?)\]\s*as const", ts.read_text(encoding="utf-8"), re.S)
+    if not m:
+        return
+    expected = re.findall(r'"([^"]+)"', m.group(1))
+    names = model_ing.names
+    got = [names[i] for i in sorted(names)] if isinstance(names, dict) else list(names)
+    if got != expected:
+        print("[model] WARNING: ingredients model classes do not match src/lib/classNames.ts "
+              f"({len(got)} vs {len(expected)}). Promote the right checkpoint with "
+              "training/promote.py, or update classNames.ts.")
+    else:
+        print(f"[model] ingredients classes match src/lib/classNames.ts ({len(got)})")
+
+
+_check_ingredient_classes()
+
 # --- dishes classifier (optional — present only if the IF20 ablation ran) -----
 _dish_path = _resolve("dishes", "best_dishes.pt", None)
 model_dish = None

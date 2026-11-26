@@ -5,7 +5,7 @@ ONNX for the browser inference path, loads both back to confirm they
 work with a zero-tensor smoke forward pass, and prints a clean summary
 (class count, size, inference latency on this machine).
 
-    python training/promote.py --run yolov11m_if20_pretrain
+    python training/promote.py --run yolov11m_if20_pretrain --as dishes
     # or an explicit file:
     python training/promote.py --weights results/<run>/weights/best.pt
 
@@ -15,8 +15,11 @@ Safeties
   you really want the demo model to be synthetic.
 - Backs up the previous backend/best.pt as backend/best.pt.bak before
   overwriting, so rollback is one rename away.
-- Writes a promotion record to backend/.promoted.json with the run id,
-  source path, timestamp, and class count.
+- Refuses to put a model into the ingredients slot (backend/best.pt) unless
+  its class list matches src/lib/classNames.ts exactly, names and order.
+  Pass --allow-class-drift to override.
+- Writes a promotion record to backend/.promoted_<slot>.json with the run
+  id, source path, timestamp, and class count.
 """
 from __future__ import annotations
 
@@ -42,6 +45,27 @@ ROOT = Path(__file__).resolve().parents[1]
 RESULTS = ROOT / "results"
 LEGACY_RESULTS = ROOT / "runs/detect/results"
 BACKEND = ROOT / "backend"
+CLASS_NAMES_TS = ROOT / "src/lib/classNames.ts"
+
+
+def frontend_class_names() -> list[str] | None:
+    """Parse CLASS_NAMES from src/lib/classNames.ts (the Pantry page's list of
+    ingredient classes, in model output order). None if the file is missing."""
+    if not CLASS_NAMES_TS.exists():
+        return None
+    import re
+    text = CLASS_NAMES_TS.read_text(encoding="utf-8")
+    m = re.search(r"CLASS_NAMES[^=]*=\s*\[(.*?)\]\s*as const", text, re.S)
+    if not m:
+        return None
+    return re.findall(r'"([^"]+)"', m.group(1))
+
+
+def model_class_names(weights: Path) -> list[str]:
+    names = YOLO(str(weights)).names
+    if isinstance(names, dict):
+        return [names[i] for i in sorted(names)]
+    return list(names)
 
 
 def find_weights(run: str) -> Path:
@@ -81,6 +105,9 @@ def main() -> None:
                     help="Which backend slot to promote into. 'auto' (default) "
                          "inspects the run's args.yaml: trained on indianfood20 "
                          "-> dishes; anything else -> ingredients.")
+    ap.add_argument("--allow-class-drift", action="store_true",
+                    help="Promote into the ingredients slot even if the model's "
+                         "class list differs from src/lib/classNames.ts.")
     args = ap.parse_args()
 
     if not args.run and not args.weights:
@@ -133,6 +160,28 @@ def main() -> None:
         print(f"[promote.py] slot auto-detected: {slot}")
 
     filename = "best.pt" if slot == "ingredients" else "best_dishes.pt"
+
+    # The ingredients slot backs the Scan/Pantry flow, whose class list is
+    # hard-coded in src/lib/classNames.ts. Check before overwriting best.pt so
+    # a 20-class dish model can't silently replace the 107-class detector.
+    if slot == "ingredients":
+        expected = frontend_class_names()
+        got = model_class_names(src)
+        if expected is not None and got != expected:
+            missing = [c for c in expected if c not in got]
+            extra = [c for c in got if c not in expected]
+            msg = (f"[promote.py] class mismatch: {src.name} has {len(got)} classes, "
+                   f"src/lib/classNames.ts expects {len(expected)}.\n"
+                   f"    not in model: {missing[:10]}{' ...' if len(missing) > 10 else ''}\n"
+                   f"    not in classNames.ts: {extra[:10]}{' ...' if len(extra) > 10 else ''}")
+            if not missing and not extra:
+                msg += "\n    same names, different order (class ids would be mislabelled)."
+            if not args.allow_class_drift:
+                raise SystemExit(
+                    msg + "\n    If this is a dish model, pass --as dishes. If the ingredient "
+                    "classes really changed, update src/lib/classNames.ts first or pass "
+                    "--allow-class-drift.")
+            print(msg + "\n    proceeding (--allow-class-drift).")
 
     # Copy with a backup so rollback is cheap.
     BACKEND.mkdir(parents=True, exist_ok=True)
@@ -198,14 +247,6 @@ def main() -> None:
     record_path = BACKEND / f".promoted_{slot}.json"
     record_path.write_text(json.dumps(record, indent=2), encoding="utf-8")
     print(f"[promote.py] wrote {record_path}")
-
-    # Sanity check: current frontend expects a specific class count. Flag drift.
-    class_names_file = ROOT / "src/lib/classNames.ts"
-    if class_names_file.exists():
-        head = class_names_file.read_text(encoding="utf-8")[:4000]
-        if f"length {len(names)}" not in head and f"{len(names)}" not in head[:400]:
-            print("[promote.py] note: your new model has", len(names),
-                  "classes. Double-check src/lib/classNames.ts matches, or the UI will mis-label boxes.")
 
     print("[promote.py] done. Restart the backend to pick up the new weights:")
     print("    cd backend && python app.py")
