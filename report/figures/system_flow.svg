@@ -51,7 +51,7 @@
   <g>
     <rect x="130" y="180" width="200" height="60" rx="10" class="model"/>
     <text x="230" y="204" text-anchor="middle" class="label-light">FastAPI backend</text>
-    <text x="230" y="222" text-anchor="middle" class="sub-light">YOLOv11m · 107 classes</text>
+    <text x="230" y="222" text-anchor="middle" class="sub-light">3× YOLOv11m · 186 classes</text>
 
     <rect x="370" y="180" width="200" height="60" rx="10" class="data"/>
     <text x="470" y="204" text-anchor="middle" class="label-dark">recipes.json</text>
@@ -63,7 +63,7 @@
 
     <rect x="610" y="90"  width="200" height="50" rx="10" class="data"/>
     <text x="710" y="112" text-anchor="middle" class="label-dark">Indian Food Nutrition CSV</text>
-    <text x="710" y="128" text-anchor="middle" class="sub-dark">1,005 dishes · 1,381 variants</text>
+    <text x="710" y="128" text-anchor="middle" class="sub-dark">1,014 dishes · 1,381 variants</text>
 
     <!-- Edges -->
     <path d="M 415 74 Q 320 100 230 180" class="edge"/>
