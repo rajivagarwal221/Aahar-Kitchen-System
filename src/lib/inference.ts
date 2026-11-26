@@ -2,8 +2,9 @@
 //
 // The model runs server-side (FastAPI + ultralytics on your RTX). The
 // browser posts the image to /detect and renders the returned boxes.
-// Set VITE_DETECT_URL in .env.local to point at the backend; defaults
-// to http://localhost:8000/detect for local dev.
+// Set VITE_DETECT_URL in .env.local to point at the backend. Without it,
+// `npm run dev` sends /detect to the Vite dev server, which proxies it to
+// http://localhost:8000 (see vite.config.ts), so phones on the LAN work too.
 
 export type Detection = {
   id: string;
@@ -19,8 +20,8 @@ export type Detection = {
 };
 
 const DETECT_URL: string =
-  (import.meta.env.VITE_DETECT_URL as string | undefined) ??
-  'http://localhost:8000/detect';
+  (import.meta.env.VITE_DETECT_URL as string | undefined) ||
+  (import.meta.env.DEV ? '/detect' : 'http://localhost:8000/detect');
 
 async function dataUrlToBlob(src: string): Promise<Blob> {
   // If src is already a blob: or http(s): URL, fetch it (works for both).
@@ -55,7 +56,7 @@ export async function detectIngredients(
   if (!res.ok) {
     throw new Error(
       `Detection backend returned ${res.status}. ` +
-      `Is it running at ${DETECT_URL}? See backend/README.md.`,
+      `Is it running at ${DETECT_URL}? Start it with "python backend/app.py" (see backend/README.md).`,
     );
   }
   const dets = (await res.json()) as Detection[];
