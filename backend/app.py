@@ -431,15 +431,53 @@ def _iou(a: dict, b: dict) -> float:
     return inter / union if union > 0 else 0.0
 
 
+# --- brand-model guard for the merged scan ------------------------------------
+# The packaged-brand model was trained without "background" photos, so on a
+# photo of loose vegetables it often fires a frame-filling box with a made-up
+# brand (carrot -> Horlicks 94%, cucumber -> Real Juice 83%). The ingredient
+# model is reliable there, so the merged scan uses it as a referee:
+#   * brand boxes need CONF_PACKAGED (default 0.35, vs CONF for the rest);
+#   * when the ingredient model is sure (>= PRODUCE_CONF) the photo shows fresh
+#     produce, a brand box covering that produce is dropped, and a smaller box
+#     elsewhere in the photo (a ketchup bottle beside tomatoes) is kept only if
+#     it reaches PRODUCE_BRAND_CONF.
+# On 160 fruit/vegetable photos this cut photos with a fake brand from 85 to 1,
+# and kept every brand box on 20 shop-shelf photos. /detect/packaged is unfiltered.
+CONF_PACKAGED      = float(os.environ.get("CONF_PACKAGED", "0.35"))
+PRODUCE_CONF       = float(os.environ.get("PRODUCE_CONF", "0.5"))
+PRODUCE_BRAND_CONF = float(os.environ.get("PRODUCE_BRAND_CONF", "0.7"))
+FRESH_PRODUCE = {
+    "apple", "banana", "beetroot", "cabbage", "capsicum", "carrot", "cauliflower",
+    "chilli pepper", "coriander_leaves", "corn", "cucumber", "curry_leaves",
+    "drumstick_leaves", "eggplant", "fresh_coconut", "garlic", "ginger", "grape",
+    "jalepeno", "kiwi", "lemon", "lettuce", "mango", "methi_leaves", "mint_leaves",
+    "onion", "orange", "pear", "peas", "pineapple", "pomegranate", "potato",
+    "raddish", "spinach", "sweetcorn", "sweetpotato", "tomato", "turnip", "watermelon",
+}
+
+
+def _brand_ok(p: Det, ingredients: list[Det]) -> bool:
+    if p.confidence < CONF_PACKAGED:
+        return False
+    produce = [d for d in ingredients
+               if d.className in FRESH_PRODUCE and d.confidence >= PRODUCE_CONF]
+    if not produce:
+        return True
+    if any(_iou(d.box, p.box) > 0.3 for d in produce):
+        return False
+    return p.confidence >= PRODUCE_BRAND_CONF
+
+
 def _scan(img) -> list[Det]:
-    """Ingredients + packaged, merged. Where a branded pack and an ingredient
+    """Ingredients + packaged, merged. Brand boxes are checked against the
+    ingredient model (see _brand_ok). Where a branded pack and an ingredient
     box name the same pantry item in the same place, keep the branded one."""
     slots = ["ingredients"] + (["packaged"] if "packaged" in MODELS else [])
     raw = _raw(img, slots)   # one forward pass when the combined file is loaded
     dets = _to_dets(img, "ingredients", raw["ingredients"])
     if "packaged" not in MODELS:
         return dets
-    packs = _to_dets(img, "packaged", raw["packaged"])
+    packs = [p for p in _to_dets(img, "packaged", raw["packaged"]) if _brand_ok(p, dets)]
     dets = [d for d in dets
             if not any(p.className == d.className and _iou(p.box, d.box) > 0.3 for p in packs)]
     merged = dets + packs

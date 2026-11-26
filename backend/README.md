@@ -130,6 +130,9 @@ Recommended setups:
 | `MODEL_URL`           | HF `Rajiv221/aahar-ingredient-detector` | Primary download URL |
 | `MODEL_URL_FALLBACK`  | –                                       | Second mirror if primary fails |
 | `CONF`                | `0.25`                                  | Detection confidence threshold |
+| `CONF_PACKAGED`       | `0.35`                                  | Merged scan: minimum confidence for a brand box |
+| `PRODUCE_CONF`        | `0.5`                                   | Merged scan: when the ingredient model is this sure a photo shows fresh produce, brand boxes over it are dropped |
+| `PRODUCE_BRAND_CONF`  | `0.7`                                   | Merged scan: a brand box elsewhere in a produce photo needs this confidence |
 | `IOU`                 | `0.45`                                  | NMS IoU threshold |
 | `ALLOWED_ORIGINS`     | `localhost:5173, localhost:8000`        | Comma-separated origins allowed via CORS; use `*` for wide-open demos |
 
