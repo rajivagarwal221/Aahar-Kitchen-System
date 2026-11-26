@@ -72,9 +72,11 @@ of whose classes map directly to pantry ingredients), and a 20-class
 dish classifier. Without retraining, the three networks are packed
 into a single ONNX file (186 classes, 60.2\,M parameters) that serves
 every endpoint from one forward pass and returns the same detections
-as the separate models. A guard that uses the ingredient model as a
-referee cut invented brand tags on 160 produce photographs from 85 to
-1 while keeping every brand on 20 shelf photographs. A 450-recipe
+as the separate models. The brand detector reaches 0.816 mAP@50 on
+its validation split; a guard that uses the ingredient model as a
+referee, evaluated but not yet enabled, cut invented brand tags on 160
+produce photographs from 85 to 1 while keeping every brand on 20
+shelf photographs. A 450-recipe
 index built from the
 IndianFoodDataset drives a client-side ranker that combines pantry
 coverage, condition-aware penalties for each family member, and cook
@@ -84,7 +86,8 @@ LibreView / Dexcom CSV pipeline computes the consensus CGM metrics in
 the browser; and a per-member Glycemic Sensitivity Index, learned from
 logged meals and their CGM windows, labels each recipe with a
 predicted glycemic impact. The 20-class dish classifier reaches 0.988
-mAP@50 and 0.965 F1 on a 1{,}159-image validation split. In an
+mAP@50 and 0.965 F1 on a 1{,}159-image validation split, and 95.0\%
+top-1 accuracy on 419 photographs from an independent dataset. In an
 end-to-end test, the scan-to-pantry flow worked in desktop and
 phone-sized browsers, clean photographs of common vegetables were
 recognized at 97--100\% confidence, and dishes within the
@@ -389,8 +392,8 @@ checked against the lists the UI depends on. Endpoints:
 \end{itemize}
 Every detection is returned as \texttt{\{classId, className, label,
 confidence, box, brand\}}, with a base confidence threshold of 0.25
-and NMS IoU 0.45. In the merged scan, brand boxes must also pass the
-guard described in \S\ref{sec:e2e}. A display-name map translates the
+and NMS IoU 0.45. An additional guard for brand boxes in the merged
+scan is evaluated in \S\ref{sec:e2e}. A display-name map translates the
 107 raw ingredient keys (e.g.\ \texttt{toor\_dal},
 \texttt{methi\_leaves}) into friendly labels (``Toor dal'', ``Methi
 (fenugreek) leaves''). Non-image uploads and unknown slot names are
@@ -645,16 +648,18 @@ contributed only 307 images for 21 classes because its server
 returned errors during the run. Photographs without boxes are boxed
 automatically with the open-vocabulary detector YOLO-World, and a
 contact sheet is shown so that wrong photographs can be removed by
-hand. No household photographs were used. The final number of
-training and validation images is
-\pending{N train / N val images -- from the notebook's per-class count cell}.
+hand. No household photographs were used. The validation split
+holds 380 boxes across 58 classes (Balaji Wafers has no validation
+boxes); the number of training images is
+\pending{N training images -- from the notebook's per-class count cell}.
 
 \textbf{Training.} YOLOv11m was fine-tuned from COCO on a Colab T4
 GPU at $640\times640$, configured for 80 epochs with early-stopping
 patience 20, mosaic augmentation (disabled for the last 10 epochs),
 rotation up to $10^\circ$ and scale jitter 0.6. Horizontal flipping
 was \emph{disabled}, since a mirrored logo or label is not a real
-product. Training took about two hours. The exported model has 125
+product. Training stopped early after 72 of the 80 epochs (no
+improvement for 20 epochs after the best epoch, 52) and took 3.1\,h. The exported model has 125
 layers after fusion, 20{,}075{,}521 parameters and 67.9 GFLOPs at
 $640\times640$, and is 76.9\,MB as ONNX. Results are in
 \S\ref{sec:packaged-results}.
@@ -938,8 +943,10 @@ and took 17.1\,h.
         detection on cluttered fridge interiors (AHAAR-Fridge,
         \S\ref{sec:fridge}) will be harder and is not yet captured.
   \item Validation images come from the same Kaggle collection as the
-        training images. Accuracy on household phone photos of
-        home-cooked plates is untested and is likely to be lower.
+        training images. An independent web-photo dataset gives 95\%
+        top-1 accuracy (\S\ref{sec:crossdata}), but accuracy on
+        household phone photos of home-cooked plates is untested and
+        is likely to be lower.
   \item The 107-class ingredient detector behind \texttt{POST
         /detect} is a separate model trained earlier on the merged
         fruit-vegetable (Kaggle
@@ -1028,6 +1035,48 @@ mAP@50:95.}
 \label{fig:curves}
 \end{figure}
 
+\subsection{Cross-Dataset Check of the Dish Classifier}
+\label{sec:crossdata}
+
+To test the dish classifier outside its own data, we ran it on the
+test split of an independent Indian food dataset (\emph{The Massive
+Indian Food Dataset}, CC0, distributed on Hugging Face as
+\texttt{bharat-raghunathan/indian-foods-dataset}; 961 test images, 15
+classes). Eight of its classes correspond to IF20 classes; we count a
+photograph as correct when the highest-confidence detection names the
+corresponding class. Table~\ref{tab:crossdata} gives the result: 398
+of 419 photographs (95.0\%) over the seven exact matches, and 432 of
+453 (95.4\%) when the source's generic ``dosa'' class is counted
+against IF20's \emph{masala dosa}. The most frequent error is pav
+bhaji predicted as dal makhani (3 of 61), two thick curries in similar
+bowls (Fig.~\ref{fig:threemodels}, middle row, right). Both datasets
+were collected from the web, and we did not check them for duplicate
+images, so a small overlap cannot be ruled out.
+
+\begin{table}[!tb]
+\caption{Dish classifier on an independent test set (top-1 accuracy).}
+\label{tab:crossdata}
+\centering
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{l l r r}
+\toprule
+\textbf{Source class} & \textbf{IF20 class} & \textbf{Correct / N} & \textbf{Acc.} \\
+\midrule
+cholebhature & chole bhature & 64 / 66 & 97.0\% \\
+dhokla       & dhokla        & 47 / 50 & 94.0\% \\
+jalebi       & jalebi        & 61 / 62 & 98.4\% \\
+kathiroll    & kaathi rolls  & 64 / 68 & 94.1\% \\
+pakora       & pakode        & 73 / 76 & 96.1\% \\
+panipuri     & paani puri    & 35 / 36 & 97.2\% \\
+pavbhaji     & pav bhaji     & 54 / 61 & 88.5\% \\
+\midrule
+\multicolumn{2}{l}{\textbf{Seven exact matches}} & \textbf{398 / 419} & \textbf{95.0\%} \\
+dosa         & masala dosa   & 34 / 34 & 100\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
 \subsection{Packaged-Brand Detector}
 \label{sec:packaged-results}
 
@@ -1035,13 +1084,13 @@ Unlike the other two models, the packaged-brand detector is trained
 on real bounding boxes (from Roboflow annotations and YOLO-World
 auto-boxing, \S\ref{sec:packaged}), so its mAP@50:95 measures
 localization as well as recognition. Table~\ref{tab:packaged}
-reports its validation metrics. The per-class table produced by the
-training notebook (\texttt{per\_class.csv}) has not yet been added to
-this report.
+reports the metrics of the best epoch on the validation split, and
+Fig.~\ref{fig:packaged} shows the per-class results and the
+validation curves.
 
 \begin{table}[!tb]
 \caption{YOLOv11m packaged-brand detector on its validation split
-(59 classes).}
+(380 boxes, 58 classes), best epoch.}
 \label{tab:packaged}
 \centering
 \footnotesize
@@ -1049,27 +1098,49 @@ this report.
 \toprule
 \textbf{Metric} & \textbf{Value} \\
 \midrule
-mAP@50                 & \pending{TBD} \\
-mAP@50:95              & \pending{TBD} \\
-Precision / Recall     & \pending{TBD} / \pending{TBD} \\
-Epochs trained         & \pending{TBD} (of 80) \\
-Parameters             & 20{,}075{,}521 \\
+mAP@50                 & 0.816 \\
+mAP@50:95              & 0.691 \\
+Precision / Recall     & 0.660 / 0.847 \\
+Epochs (best / run)    & 52 / 72 of 80 \\
+Training time (T4)     & 3.1\,h \\
+Parameters (fused)     & 20{,}075{,}521 \\
 Pantry-mapped classes  & 13 of 59 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\textbf{Per class}: \pending{Insert the per-class mAP@50 table from
-cell~12 of \texttt{train\_aahar\_packaged.ipynb}; name the strongest
-and weakest brands and the classes with fewer than 30 training
-boxes.}
+\begin{figure*}[!t]
+\centering
+\includegraphics[width=\textwidth]{figures/ahaar_packaged_results.png}
+\caption{Packaged-brand detector. (a) Per-class mAP@50 on the
+validation split, sorted; green bars are the brands that map to a
+pantry ingredient, and the dashed line is the overall value. (b)
+Validation mAP@50 and mAP@50:95 per epoch; training stopped at epoch
+72, and the best epoch (52) was kept. Per-class values come from the
+notebook's separate validation pass (mean 0.819 over the 58 classes).}
+\label{fig:packaged}
+\end{figure*}
+
+\textbf{Overall.} Validation mAP@50 passes 0.80 by epoch 14 and then
+plateaus between 0.77 and 0.83, while mAP@50:95 keeps rising slowly to
+0.69. Recall (0.847) is clearly higher than precision (0.660): the
+model finds most packs but also proposes extra boxes, which matches
+the false brand tags on loose produce reported in \S\ref{sec:e2e}.
+
+\textbf{Per class.} Twenty-five of the 58 classes reach mAP@50
+$\geq 0.90$, among them Amul butter (0.957, 31 boxes), Maggi noodles
+(0.983, 44 boxes) and Aashirvaad atta (0.995). Four classes fall below
+0.50: India Gate basmati (0.269), MDH masala (0.352), Taaza tea
+(0.413) and Sunfeast Dark Fantasy (0.482). Most classes have only
+1--9 validation boxes (only Amul cheese, Amul butter, Amul dahi and
+Maggi noodles have 15 or more), so individual per-class values are
+noisy; a single box can move a class from 0.5 to 1.0.
 
 Because the web photos are boxed automatically and the validation
 split is drawn from the same Roboflow and web sources as the training
-split,
-these numbers are likely optimistic for photos taken in a home
-kitchen. Its behaviour on such photos, including false positives on
-loose vegetables, is reported in \S\ref{sec:e2e}.
+split, these numbers are likely optimistic for photographs taken in a
+home kitchen. Its behaviour on such photographs, including false
+positives on loose vegetables, is reported in \S\ref{sec:e2e}.
 
 \subsection{Pilot Ablation (8-class subset)}
 
@@ -1142,7 +1213,27 @@ After the fix, scanning from a phone-sized browser at the laptop's
 network address worked.
 
 \textbf{Detection quality.} Table~\ref{tab:e2e} lists what the merged
-scan and the dish slot returned on the test photographs.
+scan and the dish slot returned on the test photographs, and
+Fig.~\ref{fig:threemodels} shows the combined ONNX model's output for
+all three detectors on further public photographs.
+
+\begin{figure*}[!t]
+\centering
+\includegraphics[width=\textwidth]{figures/ahaar_three_models.jpg}
+\caption{Output of the combined ONNX model for each detector, at the
+backend's 0.25 threshold. \textbf{Top}: ingredient slot on loose
+produce (photographs from a public fruit-and-vegetable dataset that
+may overlap the ingredient model's training data); the box covers the
+whole frame because the model was trained on whole-image labels.
+\textbf{Middle}: dish slot on the independent test set of
+\S\ref{sec:crossdata}; the first four are correct, and the last is a
+pav bhaji misread as dal makhani. \textbf{Bottom}: packaged-brand
+slot on loose produce. Every brand tag here is false; struck-through
+grey tags are the ones the guard evaluated below removes, leaving
+only the ingredient. No labelled photographs of Indian packs on a
+kitchen counter were available for a positive brand example.}
+\label{fig:threemodels}
+\end{figure*}
 
 \begin{table}[!tb]
 \caption{End-to-end detections on sample photographs (merged
@@ -1179,8 +1270,8 @@ stand out:
   \item \textbf{Brand false positives on loose produce.} The
         packaged model fires on vegetables (a carrot returned
         ``Balaji Wafers'' at 62\%), because it was trained without
-        loose produce as background. This is addressed by the brand
-        guard described below.
+        loose produce as background. A guard that addresses this is
+        evaluated below.
   \item \textbf{Loose pulses.} Visually similar dals and legumes are
         confused with each other, and a collage of pulses returned
         nothing.
@@ -1194,8 +1285,10 @@ stand out:
 model. With the plain 0.25 threshold, 85 of the 160 photographs
 received at least one invented brand, often at high confidence (a
 carrot as Horlicks at 94\%, an onion as Kissan Jam at 97\%). We
-therefore use the ingredient model, which is reliable on produce, as
-a referee in the merged scan. A brand box (i)~needs a confidence of
+therefore evaluated a guard that uses the ingredient model, which is
+reliable on produce, as a referee in the merged scan. It is
+implemented on a development branch and is not yet enabled in the
+released backend. A brand box (i)~needs a confidence of
 at least 0.35; (ii)~is dropped if it overlaps (IoU $>0.3$) a
 fresh-produce detection that the ingredient model makes with
 confidence $\geq 0.5$; and (iii)~if such produce is present elsewhere
