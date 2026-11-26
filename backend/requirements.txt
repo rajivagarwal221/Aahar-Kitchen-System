@@ -3,3 +3,4 @@ fastapi>=0.110,<1
 uvicorn[standard]>=0.30,<1
 python-multipart>=0.0.9,<1
 pillow>=10,<12
+onnxruntime>=1.17,<2     # for the combined model file (aahar_combined.onnx)
