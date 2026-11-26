@@ -204,16 +204,17 @@ with your freshly-trained one in one command:
 ```bash
 python training/promote.py --run yolov11m_if20_pretrain --as dishes   # dish model -> backend/best_dishes.pt
 python training/promote.py --run <ingredient-run>                    # ingredient model -> backend/best.pt
+python training/promote.py --weights <packaged best.pt> --as packaged # brand model -> backend/best_packaged.pt
 ```
 
 This copies `results/<run>/weights/best.pt` to `backend/best.pt`
-(or `backend/best_dishes.pt` for the dishes slot),
+(or `best_dishes.pt` / `best_packaged.pt` for the other slots),
 exports an ONNX next to it for browser-side inference, runs a
 zero-tensor smoke forward pass to confirm both load, backs up any
 previous `backend/best.pt` as `.pt.bak`, writes a promotion record
-to `backend/.promoted_<slot>.json`, and refuses to overwrite the
-ingredients slot when the model's class list differs from
-`src/lib/classNames.ts` (pass `--allow-class-drift` to override).
+to `backend/.promoted_<slot>.json`, and refuses to promote a model whose
+class list differs from the slot's list in the repo (see
+`backend/slots.py`; pass `--allow-class-drift` to override).
 
 Flags:
 - `--weights <path>` — promote a specific file instead of a run.
