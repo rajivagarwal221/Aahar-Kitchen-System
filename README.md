@@ -21,7 +21,33 @@ A multi-page progressive web app for AHAAR, a household food assistant for India
 
 **10 Indian languages** — the UI chrome (nav, CTAs, footer) is translated into English, Hindi, Bengali, Tamil, Telugu, Marathi, Gujarati, Kannada, Malayalam and Punjabi. Missing keys fall back to English. Add a locale in `src/locales/` and register it in `src/lib/i18n.ts`.
 
+**Built with** React 18 + TypeScript + Vite + Tailwind (PWA), FastAPI + Ultralytics YOLOv11 for detection, Firebase Authentication for optional sign-in, and Vercel for hosting.
+
 Pantry, shopping list, family members, health readings, CGM points and meal history are saved in the browser (`localStorage`); nothing is sent anywhere except the photo that goes to the detection backend and (optionally) Firebase for authentication.
+
+## Quick start
+
+```bash
+git clone https://github.com/rajivagarwal221/Aahar-Kitchen-System.git
+cd Aahar-Kitchen-System
+npm install && npm run dev        # open http://localhost:5173
+```
+
+No backend, keys or model are needed to explore the app: use **Load a sample pantry** on the Pantry page and **Try sample data** on the Health page.
+
+## Repository layout
+
+| Path | What's inside |
+| --- | --- |
+| `src/` | The React app: `pages/` (one file per route), `lib/` (recipe ranking, planner, CGM, GSI, auth), `locales/` (10 languages) |
+| `public/` | `recipes.json` (450-recipe index), `sample-cgm.csv`, favicon |
+| `backend/` | FastAPI detection server that loads the YOLO model |
+| `training/` | Training, evaluation, ablation and plotting scripts plus configs |
+| `datasets/` | Dataset configs, fetch scripts and the two CSVs the recipe builder reads |
+| `notebooks/` | Colab notebooks for training the detector |
+| `results/` | Metrics and plots from training runs (weights are not committed) |
+| `report/` | IEEE-format project report (LaTeX) and figures |
+| `papers/` | Reading list with links to the papers the report builds on |
 
 ## Run
 
@@ -131,3 +157,7 @@ Vercel hosts the static site only. **Detection needs `backend/` running somewher
 `report/` holds the IEEE-format project report (`main.tex`, `references.bib`, `figures/system_flow.{svg,png}`). See `report/README.md` for build steps on Overleaf and locally.
 
 Group 19: Rajiv Agarwal, Alan Joseph, Aryan Raina. Guide: Ms. Sharlene Rebeiro. AY 2026-27.
+
+## Keys and secrets
+
+Never commit `.env.local` or any file with real keys; `.gitignore` already excludes them. Only `.env.example`, with empty values, belongs in the repo.
