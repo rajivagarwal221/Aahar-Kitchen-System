@@ -19,6 +19,9 @@
 
 \hypersetup{colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue}
 \setlength{\emergencystretch}{2em}
+% Visible marker for numbers that are not yet available. Search for
+% \pending before submission; every use must be filled in or removed.
+\newcommand{\pending}[1]{\textcolor{red}{\textbf{[#1]}}}
 \graphicspath{{figures/}{./}}
 
 % --- float tuning: let figures/tables fill pages instead of leaving gaps ---
@@ -62,9 +65,16 @@ that turns one photograph of the inside of a refrigerator into a
 ranked set of culturally appropriate recipes, portioned per family
 member, re-ranked over time by each user's personal glycemic response
 captured from a Continuous Glucose Monitor (CGM), and surfaced in ten
-Indian languages. The system is implemented end to end: a YOLOv11m
-detector fine-tuned on 107 Indian pantry classes runs behind a FastAPI
-service and detects ingredients from a phone photograph; a 450-recipe
+Indian languages. The system is implemented end to end. Three
+YOLOv11m detectors run behind a FastAPI service: a 107-class pantry
+ingredient detector, a 59-class detector for branded Indian packaged
+foods (13 of whose classes map directly to pantry ingredients), and a
+20-class dish classifier. Without retraining, the three networks are
+packed into a single ONNX file (186 classes, 60.2\,M parameters) that
+answers every endpoint from one forward pass and returns detections
+identical to the separate models. An end-to-end test of the
+scan-to-pantry flow on a phone over Wi-Fi recognized common vegetables
+at 97--100\% confidence and plated dishes at 99\%. A 450-recipe
 index pre-built from the IndianFoodDataset drives a client-side
 scorer that combines pantry coverage with per-family-member
 condition-aware penalties; dish-level nutrition from the Indian Food
@@ -77,13 +87,14 @@ household member. We ground each major design choice in ten peer-reviewed
 IEEE papers spanning object detection, cross-modal recipe retrieval,
 nutrition-aware recommendation, portion estimation, and
 glucose-driven dietary monitoring, and describe the reproducible
-training pipeline behind a 20-class Indian dish classifier
+training pipeline behind the 20-class Indian dish classifier
 (YOLOv11m, 0.988 mAP@50 and 0.965 F1 on a 1{,}159-image validation
 split).
 \end{abstract}
 
 \begin{IEEEkeywords}
-Food recognition, YOLO, Indian cuisine, recipe recommendation,
+Food recognition, YOLO, Indian cuisine, packaged-food recognition,
+model fusion, ONNX, recipe recommendation,
 continuous glucose monitoring, personalized nutrition, deep learning,
 progressive web application, internationalization.
 \end{IEEEkeywords}
@@ -102,8 +113,10 @@ together for Indian cuisine.
 AHAAR is organized as a sequence of pages that mirror the real
 decision flow in a kitchen:
 \textit{Fridge Scan $\rightarrow$ Detection $\rightarrow$ Pantry $\rightarrow$ Recipes $\rightarrow$ Family Portions $\rightarrow$ Weekly Plan $\rightarrow$ Cook-along $\rightarrow$ Health}.
-Each page is backed by real data and real inference: the detector is
-a trained YOLOv11m served from a FastAPI backend; the pantry page
+Each page is backed by real data and real inference: three trained
+YOLOv11m detectors (pantry ingredients, packaged brands, and plated
+dishes), packed into one ONNX file, are served from a FastAPI backend;
+the pantry page
 drives an aggregated nutrition profile from the 1{,}014-dish Indian
 Food Nutrition dataset; the health page ingests a Continuous Glucose
 Monitor export (Abbott LibreView or Dexcom Clarity) and computes the
@@ -114,13 +127,13 @@ windows, then uses it to flag high-impact dishes before they are cooked.
 This report consolidates: (i) the ten IEEE references that anchor
 each AHAAR subsystem; (ii) the implemented system architecture
 (frontend, inference backend, data assets, training pipeline);
-(iii) the proposed methodology for the primary ML contribution
-(a 20-class YOLOv11m dish classifier, an 8-class pilot ablation,
-and the planned AHAAR-Fridge dataset); (iv) the evaluation results
-and plan; and (v) a discussion of novelty, limitations,
-and future work.
+(iii) the methodology behind the three detectors (107-class
+ingredients, 59-class packaged brands, 20-class dishes), their fusion
+into one ONNX model, and the planned AHAAR-Fridge dataset; (iv) the
+training results, an end-to-end system test, and the evaluation plan;
+and (v) a discussion of novelty, limitations, and future work.
 
-\textbf{Contributions.} We claim four contributions:
+\textbf{Contributions.} We claim five contributions:
 \begin{enumerate}
   \item The definition of a \emph{fridge-interior} Indian ingredient
         dataset (AHAAR-Fridge, not yet captured) and a reproducible
@@ -143,6 +156,13 @@ and future work.
         cuisine, bridging the CGM-macronutrient literature
         \cite{huo2019cgm} with cross-modal recipe
         retrieval~\cite{marin2021recipe1m}.
+  \item A three-model detection stack for the Indian kitchen
+        (loose ingredients, branded packaged foods, and plated
+        dishes) whose networks are fused into a single ONNX file
+        without retraining. A brand-to-ingredient map lets a
+        detected pack (e.g.\ Amul butter) fill the same pantry slot
+        as the loose ingredient, so recipe ranking needs no
+        knowledge of brands.
 \end{enumerate}
 
 %====================================================================
@@ -252,7 +272,7 @@ component of the implemented AHAAR system.
 \toprule
 \textbf{Ref.} & \textbf{Venue} & \textbf{AHAAR component} \\
 \midrule
-\cite{redmon2016yolo}        & IEEE CVPR 2016   & YOLOv11m detector in \texttt{/scan}, \texttt{/detect} \\
+\cite{redmon2016yolo}        & IEEE CVPR 2016   & Three YOLOv11m detectors behind \texttt{/detect} \\
 \cite{foodnet2017}           & IEEE SPL 2017    & Baseline for Indian-food backbone comparisons \\
 \cite{indianfood10}          & IEEE ICDEW 2022  & Indian plated-food detection baseline (91.8\% mAP) \\
 \cite{yolov11indian2025}     & IEEE CICN 2025   & Detection $\rightarrow$ nutrition pipeline template \\
@@ -285,9 +305,9 @@ Solid arrows are mandatory data paths; dashed arrows are optional
 (Lazy Mode skips the pantry edit; recipe nutrition is attached at
 build time from the Indian Food Nutrition CSV; GSI feeds back into
 the ranker as per-member impact chips). The single external
-runtime dependency is the FastAPI inference server, which fits on
-an RTX~3050 and can be substituted by the browser-ONNX pipeline
-documented in \texttt{training/README.md} \S6.}
+runtime dependency is the FastAPI inference server, which serves all
+three detectors from one combined ONNX file (\S\ref{sec:combined})
+and runs on a laptop CPU or an RTX~3050.}
 \label{fig:flow}
 \end{figure*}
 
@@ -322,30 +342,56 @@ documented in \texttt{training/README.md} \S6.}
 \end{itemize}
 
 \subsection{Inference Backend}
-A $\sim$300-line FastAPI service (\texttt{backend/app.py}) loads
-\emph{two} YOLO checkpoints at startup, warms each with a zero-tensor
-forward pass, and exposes the following endpoints:
+A FastAPI service (\texttt{backend/app.py}, $\sim$470 lines) serves
+three detectors, which we call \emph{slots}:
+\textit{ingredients} (107 classes), \textit{packaged} (59 brand
+classes) and \textit{dishes} (20 classes). At startup it first looks
+for the combined model \texttt{aahar\_combined.onnx}
+(\S\ref{sec:combined}): a path in \texttt{MODEL\_PATH\_COMBINED}, a
+local file, \texttt{MODEL\_URL\_COMBINED}, and finally the Hugging Face
+repository \texttt{Rajiv221/aahar-combined-detector}. If the file is
+found, every slot is answered from it (\emph{combined mode}). If it
+is missing or unusable, or \texttt{USE\_COMBINED=0} is set, the
+backend falls back to the three separate checkpoints, each with its
+own \texttt{MODEL\_PATH\_<SLOT>} / \texttt{MODEL\_URL\_<SLOT>}
+resolution and a Hugging Face default
+(\texttt{Rajiv221/aahar-ingredient-detector},
+\texttt{aahar-packaged-detector}, \texttt{aahar-dish-classifier}). A
+fresh clone therefore runs with no model files on disk. Only the
+ingredients slot is mandatory; a missing packaged or dishes slot is
+skipped, and its endpoint returns 503 with a remediation message
+instead of failing at startup. On load, each slot's class list is
+checked against the lists the UI depends on. Endpoints:
 \begin{itemize}
-  \item \texttt{POST /detect} (also \texttt{/detect/ingredients}) --
-        multipart image upload $\rightarrow$ JSON array of ingredient
-        detections (\texttt{\{classId, className, label, confidence,
-        box\}}). Uses the 107-class production detector.
-  \item \texttt{POST /detect/dishes} (or
-        \texttt{POST /detect?model=dishes}) -- same request contract,
-        routed to the 20-class IF20 dish classifier trained in
-        \S\ref{sec:training}.
-  \item \texttt{GET /health} -- liveness probe reporting both models'
-        loaded state and class counts.
+  \item \texttt{POST /detect} -- the scan used by \texttt{/scan} and
+        \texttt{/detect}. It runs the ingredients and packaged slots
+        (one forward pass in combined mode) and merges their results.
+        A packaged hit whose brand maps to a pantry ingredient
+        (\texttt{amul\_butter} $\rightarrow$ \texttt{butter}) is
+        returned under that ingredient's key, with the brand attached
+        as a separate \texttt{brand} field. Where a branded box and
+        an ingredient box name the same pantry item and overlap
+        (IoU $>0.3$), only the branded one is kept.
+  \item \texttt{POST /detect/<slot>} (or
+        \texttt{POST /detect?model=<slot>}) -- one slot only:
+        \texttt{ingredients}, \texttt{packaged}, or \texttt{dishes}
+        (the 20-class IF20 classifier of \S\ref{sec:training}, used by
+        the Cook-along finished-plate check).
+  \item \texttt{GET /health} -- liveness probe reporting the mode
+        (\texttt{combined} or \texttt{separate}), each slot's loaded
+        state and class count.
 \end{itemize}
-A client-side display-name map translates the 107 raw ingredient
-class keys (e.g.\ \texttt{toor\_dal}, \texttt{methi\_leaves}) into
-friendly English labels (``Toor dal'', ``Methi (fenugreek) leaves'')
-for the UI. Each model slot has independent environment-variable
-resolution (\texttt{MODEL\_PATH\_INGREDIENTS} / \texttt{MODEL\_URL\_INGREDIENTS}
-and \texttt{MODEL\_PATH\_DISHES} / \texttt{MODEL\_URL\_DISHES}) so
-upgrading one does not disturb the other, and the dishes slot is
-optional: missing it just makes the dishes endpoint return 503 with a
-remediation message, not a startup failure.
+Every detection is returned as \texttt{\{classId, className, label,
+confidence, box, brand\}}, with a confidence threshold of 0.25 and
+NMS IoU 0.45 shared by all slots. A display-name map translates the
+107 raw ingredient keys (e.g.\ \texttt{toor\_dal},
+\texttt{methi\_leaves}) into friendly labels (``Toor dal'', ``Methi
+(fenugreek) leaves''). Non-image uploads and unknown slot names are
+rejected with HTTP 400.
+
+During development the frontend reaches the backend through a Vite
+proxy on its own origin, so a phone on the same Wi-Fi network can
+scan through the laptop's address (\S\ref{sec:e2e}).
 
 \subsection{Data Assets}
 \begin{itemize}
@@ -398,8 +444,12 @@ around \texttt{ultralytics.YOLO.train}; an \texttt{evaluate.py} that
 writes paper-ready \texttt{metrics.json} and \texttt{per\_class.csv}
 plus a measured CPU/CUDA latency; an \texttt{ablate.py} that runs
 the cells in dependency order and aggregates
-\texttt{results/ablation.csv}; and a \texttt{plot.py} that produces
-the figure PNGs this report embeds.
+\texttt{results/ablation.csv}; a \texttt{plot.py} that produces
+the figure PNGs this report embeds; and a \texttt{combine\_models.py}
+that packs the trained detectors into one ONNX file and, with
+\texttt{--verify}, compares its output with the separate models on a
+photograph. The ingredient and packaged models are trained in Colab
+notebooks (\texttt{notebooks/}) that follow the same pattern.
 
 %====================================================================
 \section{Page Walkthrough}
@@ -427,8 +477,12 @@ application.
 \texttt{/detect}  & Detection    & Sends every captured shot (up to six)
                                  to \texttt{POST /detect} in one pass and
                                  merges the results into a single list
-                                 (piece counts summed across shots), while
-                                 keeping each shot's bounding boxes for
+                                 (piece counts summed across shots).
+                                 Loose ingredients and branded packs are
+                                 detected together; a pack that maps to a
+                                 pantry ingredient is added under that
+                                 ingredient, with its brand shown. The page
+                                 keeps each shot's bounding boxes for
                                  review. ``Skip to recipes''
                                  button on the same page replicates the
                                  Lazy-Mode flow for users who did not
@@ -517,9 +571,11 @@ lemon, yoghurt, ghee, butter, eggs, coriander leaves, curry leaves,
 methi leaves). The initial target is $\geq$150 photographs per class
 in realistic household lighting with an 80/20 train/val split.
 
-The detector served at inference time is a separate YOLOv11m model
-fine-tuned from COCO on 107 pantry classes
-(\S\ref{sec:training}-B).
+The ingredient detector served at inference time is a separate
+YOLOv11m model (20{,}112{,}529 parameters) fine-tuned from COCO on 107
+pantry classes (\S\ref{sec:training}-B). Like the dish classifier, it
+was trained on whole-image labels, so it names what is in the photo
+but always returns a box covering the whole frame.
 The proposed two-stage transfer path -- COCO $\rightarrow$ a
 20-class Indian food dataset (IF20) $\rightarrow$ AHAAR-Fridge -- is
 encoded as two YAML configs (\texttt{stage1\_if20\_yolov11m.yaml}
@@ -531,6 +587,141 @@ The on-device quality gate from \texttt{src/lib/quality.ts}
 (mean luminance and a gradient-based sharpness score computed on a
 downscaled frame) is retained as a pre-filter -- an element absent from
 \cite{redmon2016yolo,foodnet2017,indianfood10,yolov11indian2025}.
+
+\subsection{Packaged-Brand Detection}
+\label{sec:packaged}
+
+A large part of an Indian pantry is packaged: atta, salt, ghee, oil,
+tea, biscuits, instant noodles. The ingredient detector sees these as
+anonymous packets. We therefore trained a \emph{separate} YOLOv11m
+detector (20{,}075{,}521 parameters) for 59 branded products common
+in Indian homes (\texttt{datasets/packaged/classes.csv}), spanning
+dairy, staples, spices, instant food, sauces, biscuits, snacks,
+beverages, chocolate and breakfast. Classes are defined at
+brand-plus-product-line level (\texttt{maggi\_noodles}, not a
+particular flavour or pack size), because pack designs vary too much
+to separate finer classes with the available data.
+
+We chose a separate model over adding 59 classes to the ingredient
+detector for three reasons. (i) The ingredient model is trained on
+whole-image boxes, while packs on a shelf need tight boxes; mixing
+the two would confuse the box head. (ii) Retraining the combined
+model would shift the 107 existing classes. (iii) Brands and pack
+designs change often, and a separate model can be retrained alone.
+The extra inference cost of a second network is removed by the fusion
+step in \S\ref{sec:combined}.
+
+\textbf{Brand-to-pantry map.} Thirteen of the 59 classes are
+themselves pantry ingredients (for example
+\texttt{amul\_butter}~$\rightarrow$~\texttt{butter},
+\texttt{aashirvaad\_atta}~$\rightarrow$~\texttt{atta\_flour},
+\texttt{tata\_salt}~$\rightarrow$~\texttt{salt}). A
+\texttt{pantry\_map.json} file shipped with the weights records this
+map; the backend uses it to file a detected pack under the
+ingredient it contains, so the recipe ranker works unchanged. The
+other 46 classes (biscuits, snacks, chocolate and the like) appear in
+the pantry under their brand name.
+
+\textbf{Data.} Training images were merged from four Roboflow
+Universe datasets of Indian retail products (three CC~BY~4.0), with
+class names reconciled through a per-class alias list; images
+containing brand-only labels (e.g.\ ``Britannia'' with no product)
+were dropped as ambiguous. About 34 of the 59 classes have no public
+boxes at all, so the Colab notebook
+(\texttt{notebooks/train\_aahar\_packaged.ipynb}) also downloads
+about 80 web photos per class from image search, removes duplicates
+and small images, and draws boxes automatically with the
+open-vocabulary detector YOLO-World, showing a contact sheet so that
+wrong photos can be removed by hand. The final number of training and validation images is
+\pending{N train / N val images -- from the notebook's per-class count cell}.
+
+\textbf{Training.} YOLOv11m was fine-tuned from COCO on a Colab T4
+GPU at $640\times640$, configured for 80 epochs with early-stopping
+patience 20, mosaic augmentation (disabled for the last 10 epochs),
+rotation up to $10^\circ$ and scale jitter 0.6. Horizontal flipping
+was \emph{disabled}, since a mirrored logo or label is not a real
+product. Results are in \S\ref{sec:packaged-results}.
+
+\subsection{Single-File Model Combination}
+\label{sec:combined}
+
+Running three networks per request would triple the cost of a scan
+on a CPU server. Retraining one network on all 186 classes would
+require re-labelling the classification-grade data with real boxes.
+Instead, \texttt{training/combine\_models.py} packs the three trained
+networks into one ONNX graph without retraining
+(Fig.~\ref{fig:combined}). Each sub-network is fused, set to export
+mode and run on the same $640\times640$ input. Sub-network~$k$, with
+$n_k$ classes and $N_k$ anchors, produces a $(4+n_k)\times N_k$
+tensor of box coordinates and class scores. Its scores are written
+into rows $[4+o_k,\,4+o_k+n_k)$ of a $(4+186)\times N_k$ block, with
+zeros elsewhere, where $o_k$ is the class offset of model~$k$. The
+three blocks are concatenated along the anchor axis, giving a single
+standard YOLO output of shape $(1,\,190,\,3\times 8400)$:
+\begin{equation}
+\mathbf{Y} = \bigl[\,\mathbf{B}_1 \,\big|\, \mathbf{B}_2 \,\big|\, \mathbf{B}_3\,\bigr],\quad
+\mathbf{B}_k = \begin{bmatrix} \mathrm{box}_k \\ \mathbf{0}_{o_k} \\ \mathrm{cls}_k \\ \mathbf{0} \end{bmatrix}.
+\label{eq:combine}
+\end{equation}
+Because each anchor carries scores only for its own model's classes,
+ordinary YOLO post-processing (confidence filter and NMS) yields one
+list of detections over all 186 classes, and the original model of
+each detection is read from its class id. The file is a normal
+Ultralytics ONNX detector and carries an \texttt{aahar\_slots}
+metadata entry with the class-id ranges:
+ingredients $[0,107)$, dishes $[107,127)$, packaged $[127,186)$.
+
+Since the weights are copied unchanged, the combined model's
+accuracy equals that of the separate models. We checked this
+directly: on the same photographs, the combined file returned the
+same detections as the three separate checkpoints, and the backend
+loaded it from Hugging Face with every class-list check passing.
+Table~\ref{tab:models} lists the resulting models.
+
+\begin{figure}[!tb]
+\centering
+\setlength{\fboxsep}{4pt}
+\fbox{\begin{minipage}{0.94\columnwidth}\centering\footnotesize
+\textbf{input} $1\times3\times640\times640$\\[2pt]
+$\big\downarrow$ shared by all three\\[2pt]
+\begin{tabular}{@{}c@{\hspace{4pt}}c@{\hspace{4pt}}c@{}}
+\fbox{\parbox{0.27\columnwidth}{\centering Ingredients\\107 cls\\20.11\,M}} &
+\fbox{\parbox{0.27\columnwidth}{\centering Dishes\\20 cls\\20.05\,M}} &
+\fbox{\parbox{0.27\columnwidth}{\centering Packaged\\59 cls\\20.08\,M}}\\[2pt]
+cols $0$--$106$ & cols $107$--$126$ & cols $127$--$185$
+\end{tabular}\\[3pt]
+$\big\downarrow$ zero-pad scores, concatenate anchors\\[2pt]
+\textbf{output} $1\times190\times25{,}200$ $\rightarrow$ NMS
+$\rightarrow$ detections over 186 classes
+\end{minipage}}
+\caption{Combining the three detectors into one ONNX file. Each
+network writes its class scores into its own column range; the rest
+is zero, so standard NMS needs no changes.}
+\label{fig:combined}
+\end{figure}
+
+\begin{table}[!tb]
+\caption{The three AHAAR detectors and the combined model.
+All are YOLOv11m at $640\times640$.}
+\label{tab:models}
+\centering
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{l r r l}
+\toprule
+\textbf{Model} & \textbf{Classes} & \textbf{Parameters} & \textbf{Training data} \\
+\midrule
+Ingredients & 107 & 20{,}112{,}529 & Kaggle produce, spices, scraped \\
+Dishes (IF20) & 20 & 20{,}045{,}452 & Kaggle IF20 \\
+Packaged brands & 59 & 20{,}075{,}521 & Roboflow + web photos \\
+\midrule
+Combined ONNX & 186 & 60{,}233{,}502 & (no retraining) \\
+\bottomrule
+\end{tabular}
+\\[2pt]
+{\scriptsize The combined file is $\sim$242\,MB and is hosted at
+Hugging Face \texttt{Rajiv221/aahar-combined-detector}.}
+\end{table}
 
 \subsection{Nutrition-Aware Ranking}
 
@@ -676,7 +867,7 @@ Recipes card. The Personalized Glycemic Model card on
 contributing meal so the user can audit the learned signal.
 
 %====================================================================
-\section{Dish-Classifier Training and Results}
+\section{Detector Training and Results}
 \label{sec:training}
 
 The complete training protocol is in \texttt{training/README.md} and
@@ -726,8 +917,10 @@ and took 17.1\,h.
         \texttt{kritikseth/fruit-and-vegetable-image-recognition}),
         Indian spices (Kaggle
         \texttt{tankitrathaur/indian-spices-images-data}) and
-        in-house scraped-ingredient datasets. Its quantitative
-        evaluation against a held-out benchmark is deferred.
+        in-house scraped-ingredient datasets (107 classes,
+        20{,}112{,}529 parameters). Its quantitative evaluation
+        against a held-out benchmark is deferred; its behaviour on
+        real photographs is reported in \S\ref{sec:e2e}.
 \end{enumerate}
 
 \subsection{Results}
@@ -805,6 +998,49 @@ mAP@50:95.}
 \label{fig:curves}
 \end{figure}
 
+\subsection{Packaged-Brand Detector}
+\label{sec:packaged-results}
+
+Unlike the other two models, the packaged-brand detector is trained
+on real bounding boxes (from Roboflow annotations and YOLO-World
+auto-boxing, \S\ref{sec:packaged}), so its mAP@50:95 measures
+localization as well as recognition. Table~\ref{tab:packaged}
+reports its validation metrics. The per-class table produced by the
+training notebook (\texttt{per\_class.csv}) has not yet been added to
+this report.
+
+\begin{table}[!tb]
+\caption{YOLOv11m packaged-brand detector on its validation split
+(59 classes).}
+\label{tab:packaged}
+\centering
+\footnotesize
+\begin{tabular}{lr}
+\toprule
+\textbf{Metric} & \textbf{Value} \\
+\midrule
+mAP@50                 & \pending{TBD} \\
+mAP@50:95              & \pending{TBD} \\
+Precision / Recall     & \pending{TBD} / \pending{TBD} \\
+Epochs trained         & \pending{TBD} (of 80) \\
+Parameters             & 20{,}075{,}521 \\
+Pantry-mapped classes  & 13 of 59 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Per class}: \pending{Insert the per-class mAP@50 table from
+cell~12 of \texttt{train\_aahar\_packaged.ipynb}; name the strongest
+and weakest brands and the classes with fewer than 30 training
+boxes.}
+
+Because the web photos are boxed automatically and the validation
+split is drawn from the same Roboflow and web sources as the training
+split,
+these numbers are likely optimistic for photos taken in a home
+kitchen. Its behaviour on such photos, including false positives on
+loose vegetables, is reported in \S\ref{sec:e2e}.
+
 \subsection{Pilot Ablation (8-class subset)}
 
 Before the class list was corrected, an earlier version of the
@@ -846,6 +1082,93 @@ about 17\,h on the available hardware.
 
 
 %====================================================================
+\section{End-to-End System Test}
+\label{sec:e2e}
+
+We tested the complete scan $\rightarrow$ detect $\rightarrow$ pantry
+flow on the \texttt{main} branch on a CPU-only Linux machine, with
+the backend started with no local model files (all models downloaded
+from Hugging Face) and the frontend run without Firebase
+configuration. The browser was headless Chromium at desktop and
+Pixel~7 sizes. Test photographs were single ingredients, a plated
+dish, loose pulses, and a grocery shelf.
+
+\textbf{Functional results.} All three slots loaded and passed their
+class-list checks, both as separate checkpoints and from the combined
+ONNX file. Every endpoint behaved as specified, including HTTP~400
+for a non-image upload or unknown slot and 503 for a missing optional
+slot. A scan of several shots at once reached the Pantry page with
+every detected item, with no login wall when Firebase is not
+configured. When the backend was stopped, the Detect page showed a
+clear error instead of failing silently.
+
+\textbf{Phone on Wi-Fi.} The test found one functional bug. The
+development server listens on the local network, but the app sent
+photos to \texttt{http://localhost:8000}, which on a phone is the
+phone itself, so every scan from a phone failed. The fix routes
+\texttt{/detect} and \texttt{/health} through the Vite development
+proxy on the app's own origin when no backend URL is configured.
+After the fix, scanning from a phone-sized browser at the laptop's
+network address worked.
+
+\textbf{Detection quality.} Table~\ref{tab:e2e} lists what the merged
+scan and the dish slot returned on the test photographs.
+
+\begin{table}[!tb]
+\caption{End-to-end detections on sample photographs
+(merged ingredients + packaged scan, and the dish slot).}
+\label{tab:e2e}
+\centering
+\scriptsize
+\setlength{\tabcolsep}{3pt}
+\begin{tabularx}{\columnwidth}{l X}
+\toprule
+\textbf{Photograph} & \textbf{Returned} \\
+\midrule
+Tomato, onion, garlic, cauliflower, capsicum & Correct, 97--100\% \\
+Carrot & Carrot 99\%; also Balaji Wafers 62\%, Horlicks 39\% (brand false positives) \\
+Ginger & Ginger 100\%; also Lay's 29\% (brand false positive) \\
+Toor dal (loose) & Moong dal 34\% (wrong) \\
+Kala chana (loose) & Black-eyed peas 52\%, toor dal 50\% (wrong) \\
+Grocery shelf & Coconut oil 64\%, mustard oil 37\% \\
+Pulses collage & Nothing detected \\
+\midrule
+\multicolumn{2}{l}{\textit{Dish slot (\texttt{/detect/dishes})}} \\
+Samosa, jalebi, idli & Correct, 99\% \\
+Plate of Maggi noodles & Fried rice 99\% (Maggi is not an IF20 class) \\
+Raw tomato & Paani puri 62\% (not a dish) \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Clean photographs of single vegetables and of dishes inside the IF20
+vocabulary are recognized with high confidence. Three weaknesses
+stand out:
+\begin{enumerate}
+  \item \textbf{Brand false positives on loose produce.} The
+        packaged model fires on vegetables (a carrot returned
+        ``Balaji Wafers'' at 62\%). Both slots currently share one
+        confidence threshold (0.25), and the brand model was trained
+        without loose produce as background. A brand-specific
+        threshold and background images of loose vegetables are
+        being added.
+  \item \textbf{Loose pulses.} Visually similar dals and legumes are
+        confused with each other, and a collage of pulses returned
+        nothing.
+  \item \textbf{Out-of-vocabulary inputs.} The dish classifier always
+        names one of its 20 classes, so a dish outside that list
+        (Maggi) or a raw ingredient is mapped to the nearest dish at
+        high confidence. The Cook-along page warns the user of this.
+\end{enumerate}
+Smaller issues: since the ingredient model returns whole-frame
+boxes, several items in one shot stack their labels at the top edge;
+a clean onion photograph on a white background was flagged
+``Retake'' by the quality gate; and the development lockfile carries
+only Windows build binaries, so a local \texttt{npm ci} fails on
+Linux and macOS (hosted builds are unaffected). Real Firebase login
+and GPU latency were outside this test's scope.
+
+%====================================================================
 \section{Evaluation Plan}
 \label{sec:eval}
 
@@ -856,6 +1179,14 @@ about 17\,h on the available hardware.
         91.8\% mAP@50 reported by~\cite{indianfood10} on
         IndianFood10, demonstrating that the ingredient-level task
         is tractable and that two-stage transfer generalizes.
+  \item \textbf{Packaged brands:} per-class mAP@50 on a validation
+        split of household shelf and fridge-door photographs, and the
+        false-positive rate on photographs of loose produce before
+        and after adding background images and a brand-specific
+        threshold.
+  \item \textbf{Combined model:} detection-level agreement with the
+        three separate models on a fixed photo set, and CPU latency
+        of one combined pass against three separate passes.
   \item \textbf{Recipe retrieval:} Recall@1 and Recall@5 for a
         held-out 50-prompt query set (``I have X, Y, Z -- what
         can I cook?''), scored by the same \texttt{rankRecipes}
@@ -888,6 +1219,16 @@ object. The first is addressed by the planned AHAAR-Fridge dataset
 and the two-stage transfer pipeline; the second is addressed by the standardized
 reporting convention, which is honest about the limit.
 
+Combining the detectors at the graph level, rather than retraining
+one large model, kept each model independently replaceable: a new
+brand model can be trained and re-combined without touching the
+ingredient or dish weights, and the backend falls back to the separate
+files if the combined one is unavailable. The cost is that the
+combined file is three networks in size ($\sim$242\,MB) and one
+combined pass still does the work of three backbones; a shared
+backbone with three heads would be smaller, but would require
+retraining with real boxes for all 186 classes.
+
 The GSI-based recipe re-ranker is the project's most differentiated
 contribution. It is the point at which AHAAR stops being yet another
 recipe app and becomes a personalized health tool for the Indian
@@ -900,7 +1241,12 @@ We state this limitation explicitly in the on-screen disclaimer, and
 target a larger IRB-supervised study as future work. The rule-based
 family-fit scoring is similarly honest: it draws on well-known
 dietary guidance (DASH for BP, soluble fiber for cholesterol) but is
-not a substitute for clinical advice.
+not a substitute for clinical advice. On the detection side, the
+packaged-brand metrics come from validation images drawn from the
+same public and web sources as the training images, and the
+end-to-end test (\S\ref{sec:e2e}) used a small set of photographs;
+neither is a substitute for a held-out benchmark of household
+photographs.
 
 %====================================================================
 \section{Conclusion and Future Work}
@@ -909,7 +1255,10 @@ not a substitute for clinical advice.
 We have presented AHAAR, a kitchen assistant for Indian households
 that spans fridge scanning, ingredient detection, pantry management,
 recipe recommendation, per-member portioning, weekly meal planning,
-step-by-step cooking, and CGM-aware health personalization. Every
+step-by-step cooking, and CGM-aware health personalization. Its
+detection layer covers loose ingredients, branded packaged foods and
+plated dishes with three YOLOv11m models served from a single ONNX
+file. Every
 page is backed by real code and real data, each major design choice
 is anchored in a peer-reviewed paper, and the training pipeline can
 reproduce the reported metrics from a cold clone once the dataset is
@@ -918,11 +1267,17 @@ downloaded.
 Future work includes: (i) capturing AHAAR-Fridge, testing the dish
 classifier on household phone photos, repeating the two-stage
 comparison on all twenty IF20 classes, and scaling to 50 classes with
-semi-supervised labeling; (ii) extending the GSI learner to a
+semi-supervised labeling; (ii) reducing the packaged model's false
+positives on loose produce with background images and a
+brand-specific threshold, adding household shelf photographs to its
+validation split, attaching per-pack nutrition from the Indian
+packaged-foods nutrition table, and re-labelling the ingredient data
+with real boxes so the detectors can share one backbone;
+(iii) extending the GSI learner to a
 regression-based model under IRB supervision on a type-2 diabetic
-cohort; (iii) replacing the substring-based recipe matcher with a
+cohort; (iv) replacing the substring-based recipe matcher with a
 learned im2recipe-style joint embedding over
-Recipe1M+~\cite{marin2021recipe1m}; and (iv) adding an optional
+Recipe1M+~\cite{marin2021recipe1m}; and (v) adding an optional
 reference-coin affordance for gram-accurate portion estimation.
 
 %====================================================================
