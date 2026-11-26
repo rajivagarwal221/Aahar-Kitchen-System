@@ -7,7 +7,7 @@ import { Box, Camera, Check, Reset, X } from '../components/Icons';
 import { Item } from '../lib/data';
 import { useKitchen } from '../lib/store';
 import { Detection, detectIngredients } from '../lib/inference';
-import { detectionsToItems } from '../lib/detectShots';
+import { detectionsToItems, mergeShots } from '../lib/detectShots';
 
 type Phase = 'ready' | 'loading-model' | 'scanning' | 'done' | 'error';
 
@@ -58,34 +58,40 @@ export default function Detect() {
     setModelProgress(0);
     setShotDone(0);
     setPhase('loading-model');
-    try {
-      const all: Detection[] = [];
-      const boxes: Record<string, Item[]> = {};
-      const seen: Record<string, number> = {};
-      for (let i = 0; i < shots.length; i++) {
-        setActive(i);
+    const perShotDets: Detection[][] = [];
+    const boxes: Record<string, Item[]> = {};
+    const seen: Record<string, number> = {};
+    const failures: string[] = [];
+    for (let i = 0; i < shots.length; i++) {
+      setActive(i);
+      try {
         const dets = await detectIngredients(shots[i].src, (p) => {
           if (!abortRef.current) setModelProgress(p);
         });
         if (abortRef.current) return;
         boxes[shots[i].id] = detectionsToItems(dets);
         for (const cls of new Set(dets.map((d) => d.className))) seen[cls] = (seen[cls] ?? 0) + 1;
-        all.push(...dets);
-        setShotDone(i + 1);
+        perShotDets.push(dets);
+      } catch (e: unknown) {
+        if (abortRef.current) return;
+        failures.push(`Shot ${i + 1} of ${shots.length} failed: ${e instanceof Error ? e.message : String(e)}`);
       }
-      setPhase('scanning');
-      const merged = detectionsToItems(all);
-      setPerShot(boxes);
-      setSeenIn(seen);
-      setResults(merged);
-      setKept(Object.fromEntries(merged.map((i) => [i.id, true])));
-      setDetected(true);
-      setPhase('done');
-    } catch (e: unknown) {
-      if (abortRef.current) return;
-      setError(e instanceof Error ? e.message : String(e));
-      setPhase('error');
+      setShotDone(i + 1);
     }
+    if (perShotDets.length === 0) {
+      setError(failures.join(' '));
+      setPhase('error');
+      return;
+    }
+    setPhase('scanning');
+    const merged = mergeShots(perShotDets);
+    setPerShot(boxes);
+    setSeenIn(seen);
+    setResults(merged);
+    setKept(Object.fromEntries(merged.map((i) => [i.id, true])));
+    setError(failures.length ? failures.join(' ') : null);
+    setDetected(true);
+    setPhase('done');
   };
 
   const confirm = () => {
@@ -199,6 +205,8 @@ export default function Detect() {
             <p className="text-[0.85rem] text-muted max-w-md">
               {phase === 'error'
                 ? <span className="text-chilli">Detection failed: {error}</span>
+                : phase === 'done' && error
+                  ? <span className="text-chilli">{error} The list uses the other shots; remove that shot on the Scan page or run again.</span>
                 : shot
                   ? phase === 'done' && shots.length > 1
                     ? `Showing boxes for shot ${active + 1} of ${shots.length}. The list on the right combines all of them.`

@@ -65,16 +65,33 @@ export function detectionsToItems(dets: Detection[]): Item[] {
     });
 }
 
+/**
+ * Merge detections from several shots into one item per class. Piece counts
+ * take the highest count seen in any single shot, so two overlapping photos
+ * of the same shelf do not double the quantity.
+ */
+export function mergeShots(perShot: Detection[][]): Item[] {
+  const maxCount = new Map<string, number>();
+  for (const dets of perShot) {
+    for (const it of detectionsToItems(dets)) {
+      maxCount.set(it.id, Math.max(maxCount.get(it.id) ?? 0, it.qty));
+    }
+  }
+  return detectionsToItems(perShot.flat()).map((it) =>
+    it.unit === 'pcs' && it.id !== 'eggs' ? { ...it, qty: maxCount.get(it.id) ?? it.qty } : it,
+  );
+}
+
 /** Run detection on every shot in turn, reporting progress after each one. */
 export async function detectAllShots(
   sources: string[],
   onProgress?: (done: number, total: number) => void,
 ): Promise<Item[]> {
   onProgress?.(0, sources.length);
-  const all: Detection[] = [];
+  const perShot: Detection[][] = [];
   for (let i = 0; i < sources.length; i++) {
-    all.push(...(await detectIngredients(sources[i])));
+    perShot.push(await detectIngredients(sources[i]));
     onProgress?.(i + 1, sources.length);
   }
-  return detectionsToItems(all);
+  return mergeShots(perShot);
 }

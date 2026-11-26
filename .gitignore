@@ -45,8 +45,8 @@ datasets/raw/**
 !datasets/raw/**/.gitkeep
 # Small recipe/nutrition CSVs that are committed on purpose:
 # datasets/scripts/build_recipes.py reads them to build public/recipes.json.
-!datasets/raw/recipes/**/*.csv
-!datasets/raw/nutrition/**/*.csv
+!datasets/raw/recipes/indian-food-dataset/IndianFoodDatasetCSV.csv
+!datasets/raw/nutrition/indian-food-nutrition/Indian_Food_Nutrition_Processed.csv
 
 # Training outputs — results dirs, metrics, and any ultralytics fallback
 # path. Keep the results/ folder itself (via .gitkeep) so paths work.

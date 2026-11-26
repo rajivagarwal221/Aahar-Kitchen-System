@@ -1,4 +1,2 @@
 run,label,map50,map50_95,precision,recall,f1,parameters_m,weights_mb,cpu_ms,cuda_ms
 yolov11m_baseline,YOLOv11m (baseline),0.9879,0.9879,0.9744,0.9549,0.9646,20.07,38.65,232.93,74.9
-yolov11m_if20_pretrain,YOLOv11m + IF20 pretrain,0.9913,0.9845,0.977,0.9832,0.9801,20.07,38.65,203.23,24.82
-yolov11l_if20_pretrain,YOLOv11l + IF20 pretrain,0.9906,0.9852,0.974,0.9565,0.9652,25.33,48.83,271.85,109.49

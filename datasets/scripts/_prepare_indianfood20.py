@@ -15,6 +15,7 @@ stale files with old class ids never leak into training.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import random
 import re
 import shutil
@@ -68,11 +69,13 @@ def main() -> None:
     # folder, so images for one class are pooled across every matching folder.
     pooled: dict[str, list[Path]] = {c: [] for c in CLASSES}
     unrecognised: list[str] = []
+    generated = {("images", "train"), ("images", "val"), ("labels", "train"), ("labels", "val")}
     for folder in sorted(p for p in root.rglob("*") if p.is_dir()):
         rel = folder.relative_to(root).parts
-        if rel and rel[0] in ("images", "labels"):
+        if tuple(rel[:2]) in generated or "__MACOSX" in rel:
             continue
-        images = [p for p in folder.iterdir() if p.is_file() and p.suffix.lower() in IMG_EXT]
+        images = [p for p in folder.iterdir()
+                  if p.is_file() and p.suffix.lower() in IMG_EXT and not p.name.startswith("._")]
         if not images:
             continue
         key = lookup.get(normalise(folder.name))
@@ -91,10 +94,36 @@ def main() -> None:
             "  kaggle datasets download -d theeyeschico/indian-food-classification "
             f"-p {root} --unzip")
 
-    # Only now is it safe to replace the old split.
-    for d in (out_img, out_lbl):
+    # The same photo can sit in several pooled folders (e.g. train/ and test/);
+    # keep one copy per content hash so it cannot land in both splits.
+    seen_hashes: set[str] = set()
+    n_dupes = 0
+    for cls in CLASSES:
+        unique: list[Path] = []
+        for src in sorted(set(pooled[cls])):
+            h = hashlib.sha1(src.read_bytes()).hexdigest()
+            if h in seen_hashes:
+                n_dupes += 1
+                continue
+            seen_hashes.add(h)
+            unique.append(src)
+        pooled[cls] = unique
+    print(f"[indianfood20] removed {n_dupes} duplicate image(s) by content")
+
+    missing = [c for c in CLASSES if len(pooled[c]) < 2]
+    if missing and not args.allow_missing:
+        for n in unrecognised:
+            print(f"[indianfood20] ignored folder: {n}  (normalised: {normalise(Path(n).name)!r})")
+        raise SystemExit(f"\n[indianfood20] FAILED: {len(missing)} class(es) have too few images: {missing}\n"
+                         "Nothing was changed. Check the ignored-folder list above, or re-download the dataset. "
+                         "Pass --allow-missing to continue anyway.")
+
+    # Only now is it safe to replace the old split; touch only the folders this script writes.
+    for d in (out_img / "train", out_img / "val", out_lbl / "train", out_lbl / "val"):
         if d.exists():
             shutil.rmtree(d)
+    for cache in out_lbl.glob("*.cache"):
+        cache.unlink()
     for split in ("train", "val"):
         (out_img / split).mkdir(parents=True)
         (out_lbl / split).mkdir(parents=True)
@@ -102,7 +131,7 @@ def main() -> None:
     rng = random.Random(args.seed)
     counts: Counter[tuple[str, str]] = Counter()
     for cls, images in pooled.items():
-        images = sorted(set(images))
+        images = list(images)
         rng.shuffle(images)
         n_val = max(1, int(len(images) * VAL_FRACTION)) if images else 0
         for i, src in enumerate(images):

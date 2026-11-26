@@ -11,6 +11,16 @@ import { VoiceCommand, canListen, canSpeak, useVoice } from '../lib/voice';
 
 const PAN = ['#EFE4CF', '#E7C76A', '#D99A3E', '#B86B3A', '#5E8A45'];
 
+// Dish-model labels use the Kaggle spellings; recipe names use common ones.
+const SPELLING: [RegExp, string][] = [
+  [/\bpako(?:de|da|ra)s?\b/g, 'pakoda'],
+  [/\bpaani\b/g, 'pani'],
+  [/\bkaathi\b/g, 'kathi'],
+  [/\bkadhai\b/g, 'kadai'],
+  [/\bmomos\b/g, 'momo'],
+  [/\brolls\b/g, 'roll'],
+];
+
 function mmss(s: number) {
   const m = Math.floor(s / 60);
   return `${m}:${String(s % 60).padStart(2, '0')}`;
@@ -120,7 +130,8 @@ function CookAlong({ recipe }: { recipe: Recipe }) {
     }
   };
 
-  const normalize = (s: string) => s.toLowerCase().replace(/[^a-z]+/g, '');
+  const normalize = (s: string) =>
+    SPELLING.reduce((t, [re, to]) => t.replace(re, to), s.toLowerCase()).replace(/[^a-z]+/g, '');
   const topDish = dishResults?.[0];
   const dishMatchesRecipe = topDish
     ? normalize(recipe.name).includes(normalize(topDish.label)) ||
