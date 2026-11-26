@@ -30,13 +30,16 @@ The list is a first guess at what a typical Indian kitchen holds. Prune or add r
 | [Roboflow: agentsk47/indian-grocery-object-detection-mfsnx](https://universe.roboflow.com/agentsk47/indian-grocery-object-detection-mfsnx) | 10 classes | CC BY 4.0 | Only Bournvita and Nescafe are food. |
 | [Roboflow: nmims-b6ta9/retail-store-india-new-2](https://universe.roboflow.com/nmims-b6ta9/retail-store-india-new-2/dataset/1) | 1,674 images | not shown | Class list not visible publicly; the notebook prints any unmapped classes so aliases can be added. |
 | [Open Food Facts](https://world.openfoodfacts.org) (India) | Front-of-pack photos, one product each | CC BY-SA | Optional, noisy; boxed automatically. |
-| **Your own photos** | The real thing: your shelves, your lighting | yours | Most important for accuracy. Most of the val split comes from here. |
+| Web image search (Bing / DuckDuckGo) | ~80 photos per class, downloaded by the notebook | owners' copyright | Covers every class; noisy, review the contact sheet. |
+| **Your own photos** (optional) | The real thing: your shelves, your lighting | yours | Most important for accuracy. Most of the val split comes from here. |
 
 Shop-shelf datasets look very different from a home fridge door, so expect public data alone to give a weak model. About **34 of the 59 classes have no public boxes at all** (Aashirvaad, Tata Salt, India Gate, MDH, Haldiram's, Kurkure, Lay's …), which is what the labelling plan below fixes.
 
-## Labelling plan for the gaps (about 2 hours of phone photos)
+## Labelling plan for the gaps
 
-No hand-drawn boxes needed for the first version:
+**No photos of your own:** leave `FETCH_WEB_PHOTOS=True` in the notebook. It downloads about 80 images per class from Bing image search (DuckDuckGo as a fallback) into `MyDrive/AAhar/packaged_web_photos/<class>/`, removes duplicates and small images, and boxes them automatically. Web results are noisy, so check the contact sheet and delete wrong photos before training. These images are for personal or research training only.
+
+**Better accuracy at home (about 2 hours of phone photos)**, no hand-drawn boxes needed:
 
 1. For each product you have at home, make a folder named after its `class` in Google Drive: `MyDrive/AAhar/packaged_photos/<class>/`.
 2. Take **30–50 photos per product, one product per photo**: front, side, back, tilted, on the shelf, in the fridge door, half hidden, tube-light and warm bulb, near and far. Empty or crumpled packs count.
